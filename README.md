@@ -231,6 +231,157 @@ Errors: 0
 
 Les cartes déjà présentes ne sont pas recréées.
 
+
+
+
+
+
+## Fonctions shell utiles
+
+Les fonctions suivantes peuvent être placées dans :
+
+```bash
+~/.bash_helpers/jpsub.sh
+```
+
+Puis chargées depuis `~/.bashrc` :
+
+```bash
+source ~/.bash_helpers/jpsub.sh
+```
+
+Recharger ensuite le shell :
+
+```bash
+source ~/.bashrc
+```
+
+### `jpsub1`
+
+Lance le pipeline sur une vidéo YouTube.
+
+```bash
+jpsub1 "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+### `playlast`
+
+Lit la dernière vidéo traitée.
+
+```bash
+playlast
+```
+
+La fonction cherche le dernier dossier créé dans :
+
+```text
+output/<ARTISTE>/<VIDEO_ID>/
+```
+
+Elle lit en priorité :
+
+```text
+black_video.mp4
+```
+
+sinon elle utilise :
+
+```text
+source_video.*
+```
+
+### `learnlast`
+
+Lit la dernière vidéo en mode apprentissage japonais.
+
+```bash
+learnlast
+```
+
+Prérequis dans le dossier de sortie :
+
+```text
+subtitles.jp.srt
+segments.json
+```
+
+### `learnlastfr`
+
+Lit la dernière vidéo en mode apprentissage japonais + français.
+
+```bash
+learnlastfr
+```
+
+Si le fichier suivant existe, il est utilisé automatiquement :
+
+```text
+segments.fr.json
+```
+
+Sinon le mode japonais seul est utilisé.
+
+### `playartist`
+
+Permet de choisir un artiste puis une chanson.
+
+```bash
+playartist
+```
+
+Ou directement :
+
+```bash
+playartist Yumi_Arai
+```
+
+Sans argument, la fonction affiche la liste des artistes disponibles dans :
+
+```text
+output/
+```
+
+S’il n’y a qu’une seule chanson pour l’artiste, elle est lancée automatiquement.
+
+Sinon, tu peux choisir :
+
+```text
+1) chanson A
+2) chanson B
+all
+```
+
+Avec `all`, toutes les chansons de l’artiste sont lues.
+
+### `playdir`
+
+Lit directement un dossier vidéo du pipeline.
+
+```bash
+playdir output/Yumi_Arai/khXFf4dXjk8
+```
+
+La fonction utilise :
+
+```text
+black_video.mp4
+```
+
+sinon :
+
+```text
+source_video.*
+```
+
+Si `segments.json` existe, elle active le script MPV :
+
+```text
+jp_segments_bilingual.lua
+```
+
+Et si `segments.fr.json` existe, elle active le mode JP + FR.
+
+
 ---
 
 # Mise à jour après modification du code
