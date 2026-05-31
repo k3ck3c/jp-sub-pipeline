@@ -1,0 +1,9 @@
+faster-whisper
+fugashi
+unidic-lite
+PyYAML
+yt-dlp[default]
+requests
+pykakasi
+pysubs2
+openai

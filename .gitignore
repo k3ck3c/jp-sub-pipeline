@@ -1,0 +1,12 @@
+output/
+cookies/
+*.mp3
+*.wav
+*.mp4
+*.mkv
+*.m4a
+*.webm
+.env
+__pycache__/
+*.pyc
+.cache/

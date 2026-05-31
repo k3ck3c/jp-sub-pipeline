@@ -1,0 +1,380 @@
+from modules.audio_clips import export_all_segment_clips
+from modules.anki_connect import ensure_deck, ensure_model, store_media_file, add_mining_note
+from modules.vocab_miner import build_anki_cards_from_segments
+from modules.black_video import create_black_video_from_audio
+import os
+import re
+import time
+import argparse
+import yaml
+from modules.metadata import detect_artist, artist_output_dir
+from modules.utils import ensure_dir
+from modules.downloader import resolve_input
+from modules.audio import extract_audio
+from modules.asr import transcribe_japanese
+from modules.subtitle_formatter import refine_segments
+from modules.exporters import (
+    write_srt,
+    write_vtt,
+    write_transcript,
+    write_json
+)
+from modules.vocab_miner import analyze_vocab, export_anki_csv
+from modules.cache import (
+    load_cached_json,
+    save_cached_json,
+    cache_path_for
+)
+from modules.translator import translate_segments, translate_title
+
+def load_config(path="config.yaml"):
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def slugify(text: str) -> str:
+    text = text.strip().replace("\\", "_").replace("/", "_")
+    text = re.sub(r"[^\w\-.]+", "_", text, flags=re.UNICODE)
+    text = re.sub(r"_+", "_", text)
+    return text.strip("._") or "item"
+
+
+def output_name_for_input(input_value: str) -> str:
+    if input_value.startswith("http://") or input_value.startswith("https://"):
+        m = re.search(r"[?&]v=([^&]+)", input_value)
+        if m:
+            return slugify(m.group(1))
+        return slugify(input_value.rsplit("/", 1)[-1])
+    return slugify(Path(input_value).stem)
+
+
+def load_inputs_from_file(path: str):
+    items = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            items.append(line)
+    return items
+
+
+def fmt_seconds(value: float) -> str:
+    if value < 60:
+        return f"{value:.1f}s"
+    minutes = int(value // 60)
+    seconds = value % 60
+    if minutes < 60:
+        return f"{minutes}m {seconds:04.1f}s"
+    hours = int(minutes // 60)
+    minutes = minutes % 60
+    return f"{hours}h {minutes:02d}m {seconds:04.1f}s"
+
+
+def process_one(input_value: str, base_output_dir: str, config: dict, study_mode: bool):
+    timings = {}
+    item_start = time.perf_counter()
+
+    artist, video_id, meta = detect_artist(input_value)
+    output_dir = artist_output_dir(base_output_dir, artist, video_id)
+    ensure_dir(output_dir)
+
+    print(f"\n===== Processing: {input_value}")
+    print(f"===== Artist    : {artist}")
+    print(f"===== Video ID  : {video_id}")
+    print(f"===== Output dir: {output_dir}")
+
+    t0 = time.perf_counter()
+    video_path = resolve_input(input_value, output_dir)
+    timings["download_or_resolve"] = time.perf_counter() - t0
+
+    audio_path = os.path.join(output_dir, "audio.wav")
+    segments_cache = cache_path_for(output_dir, "segments_raw.json")
+    refined_cache = cache_path_for(output_dir, "segments_refined.json")
+
+    print("[2/5] Extracting audio...")
+    t0 = time.perf_counter()
+    if not os.path.exists(audio_path):
+        extract_audio(video_path, audio_path)
+    else:
+        print("[CACHE] audio.wav already exists, skipping extraction")
+    timings["audio_extract"] = time.perf_counter() - t0
+    black_video_path = os.path.join(output_dir, "black_video.mp4")
+
+    print("[2b/5] Creating black video from audio...")
+    t0 = time.perf_counter()
+    if not os.path.exists(black_video_path):
+        create_black_video_from_audio(audio_path, black_video_path)
+    else:
+        print("[CACHE] black_video.mp4 already exists, skipping generation")
+    timings["black_video"] = time.perf_counter() - t0
+
+    print("[3/5] Transcribing...")
+    t0 = time.perf_counter()
+    raw_segments = load_cached_json(segments_cache)
+    if raw_segments is None:
+        asr_backend = os.environ.get("ASR_BACKEND", "local")
+        if asr_backend == "api":
+            from modules.asr_api import transcribe_japanese_api
+            raw_segments = transcribe_japanese_api(audio_path)
+        else:
+            raw_segments = transcribe_japanese(
+                audio_path,
+                model_name=config["asr"]["model"],
+                device=config["asr"]["device"],
+                beam_size=config["asr"]["beam_size"],
+                vad_filter=config["asr"]["vad_filter"]
+            )
+        save_cached_json(segments_cache, raw_segments)
+    else:
+        print("[CACHE] Using cached raw transcription")
+    timings["transcription"] = time.perf_counter() - t0
+
+    print("[4/5] Refining subtitles...")
+    t0 = time.perf_counter()
+    segments = load_cached_json(refined_cache)
+    if segments is None:
+        segments = refine_segments(
+            raw_segments,
+            max_line_len=config["subtitles"]["max_line_len"],
+            min_duration=config["subtitles"]["min_duration"]
+        )
+        save_cached_json(refined_cache, segments)
+    else:
+        print("[CACHE] Using cached refined subtitles")
+    timings["refine"] = time.perf_counter() - t0
+
+    print("[5/5] Exporting...")
+    t0 = time.perf_counter()
+    write_srt(segments, os.path.join(output_dir, "subtitles.jp.srt"))
+    write_vtt(segments, os.path.join(output_dir, "subtitles.jp.vtt"))
+    write_transcript(segments, os.path.join(output_dir, "transcript.txt"))
+    write_json(segments, os.path.join(output_dir, "segments.json"))
+    timings["export"] = time.perf_counter() - t0
+
+    deepl_key = os.environ.get("DEEPL_API_KEY")
+    t0 = time.perf_counter()
+    if deepl_key:
+        print("[Translate] Translating to French...")
+        fr_segments = translate_segments(segments, deepl_key)
+        write_srt(fr_segments, os.path.join(output_dir, "subtitles.fr.srt"))
+        write_json(fr_segments, os.path.join(output_dir, "segments.fr.json"))
+
+        if meta.get("title"):
+            try:
+                title_fr = translate_title(meta["title"], deepl_key)
+                meta["title_fr"] = title_fr
+                meta["display_title"] = f"{meta['title']} _ {title_fr}"
+            except Exception as e:
+                print(f"[Translate title] Error: {e}")
+                meta["title_fr"] = ""
+                meta["display_title"] = meta.get("title") or video_id
+        else:
+            meta["title_fr"] = ""
+            meta["display_title"] = video_id
+    else:
+        print("[Translate] No DEEPL_API_KEY found, skipping French translation.")
+        meta["title_fr"] = ""
+        meta["display_title"] = meta.get("title") or video_id
+
+    # === AUDIO CLIPS FOR ANKI ===
+    print("[Anki Prep] Exporting audio clips...")
+    t0 = time.perf_counter()
+    clips_dir = os.path.join(output_dir, "anki_media")
+    segments_with_audio = export_all_segment_clips(audio_path, segments, clips_dir, video_id)
+    timings["anki_audio"] = time.perf_counter() - t0
+
+        
+    write_json(meta, os.path.join(output_dir, "metadata.detected.json"))
+    timings["translate"] = time.perf_counter() - t0
+
+    if deepl_key and meta.get("title"):
+        try:
+            title_fr = translate_title(meta["title"], deepl_key)
+            meta["title_fr"] = title_fr
+            meta["display_title"] = f"{meta['title']} _ {title_fr}"
+        except Exception as e:
+            print(f"[Translate title] Error: {e}")
+            meta["title_fr"] = ""
+            meta["display_title"] = meta.get("title") or video_id
+    else:
+        meta["title_fr"] = ""
+        meta["display_title"] = meta.get("title") or video_id
+
+    write_json(meta, os.path.join(output_dir, "metadata.detected.json"))
+    
+    t0 = time.perf_counter()
+    if study_mode:
+        print("[Study Mode] Mining vocabulary...")
+        vocab = analyze_vocab(segments)
+        write_json(vocab, os.path.join(output_dir, "vocab.json"))
+        export_anki_csv(vocab, os.path.join(output_dir, "study_cards.csv"))
+    timings["study"] = time.perf_counter() - t0
+
+    timings["total"] = time.perf_counter() - item_start
+    # === OPTIONAL ANKI EXPORT VIA ANKICONNECT ===
+    anki_enabled = os.environ.get("ANKI_CONNECT_ENABLED", "").lower() in {"1", "true", "yes"}
+    t0 = time.perf_counter()
+    if anki_enabled:
+        print("[Anki] Sending cards to AnkiConnect...")
+
+        fr_segments_for_anki = None
+        fr_json_path = os.path.join(output_dir, "segments.fr.json")
+        if os.path.exists(fr_json_path):
+            fr_segments_for_anki = load_cached_json(fr_json_path)
+
+        deck_name = f"JP::{artist}"
+        model_name = "JP Subtitle Mining"
+
+        ensure_deck(deck_name)
+        ensure_model(model_name)
+
+        title_for_cards = meta.get("display_title") or meta.get("title") or video_id
+
+        cards = build_anki_cards_from_segments(
+            segments_with_audio,
+            fr_segments_for_anki,
+            artist=artist,
+            title=title_for_cards,
+            video_id=video_id,
+        )
+
+    added = 0
+skipped_duplicates = 0
+errors = 0
+
+for card in cards:
+    audio_tag = ""
+    if card["audio_file"] and card["audio_path"] and os.path.exists(card["audio_path"]):
+        store_media_file(card["audio_file"], card["audio_path"])
+        audio_tag = f"[sound:{card['audio_file']}]"
+
+    try:
+        add_mining_note(
+            deck=deck_name,
+            model=model_name,
+            jp=card["jp"],
+            hiragana=card["hiragana"],
+            fr=card["fr"],
+            audio=audio_tag,
+            artist=card["artist"],
+            title=card["title"],
+            video_id=card["video_id"],
+            tags=["jp-sub", slugify(artist), video_id]
+        )
+        added += 1
+
+    except Exception as e:
+        msg = str(e).lower()
+        if "duplicate" in msg:
+            skipped_duplicates += 1
+        else:
+            errors += 1
+            print(f"[Anki ERROR] {e}")
+
+
+    print(f"[Anki] Added: {added}")
+    print(f"[Anki] Skipped duplicates: {skipped_duplicates}")
+    if errors:
+        print(f"[Anki] Errors: {errors}")
+
+    timings["anki_push"] = time.perf_counter() - t0
+    print(f"[DONE] Output written to: {output_dir}")
+    print()
+    print("===== SUMMARY =====")
+    print(f"Resolve/download : {fmt_seconds(timings['download_or_resolve'])}")
+    print(f"Audio extract    : {fmt_seconds(timings['audio_extract'])}")
+    print(f"Black video      : {fmt_seconds(timings['black_video'])}")
+    print(f"Transcription    : {fmt_seconds(timings['transcription'])}")
+    print(f"Refine           : {fmt_seconds(timings['refine'])}")
+    print(f"Export           : {fmt_seconds(timings['export'])}")
+    print(f"Translate        : {fmt_seconds(timings['translate'])}")
+    print(f"Study            : {fmt_seconds(timings['study'])}")
+    print(f"TOTAL            : {fmt_seconds(timings['total'])}")
+    print()
+
+    return timings            
+
+def main():
+    parser = argparse.ArgumentParser(description="Japanese subtitle automation pipeline")
+    parser.add_argument("--input", action="append", help="Video file path or URL; repeatable")
+    parser.add_argument("--input-file", help="Text file with one URL/path per line")
+    parser.add_argument("--input-dir", help="Directory of local video/audio files")
+    parser.add_argument("--output", default=None, help="Base output directory override")
+    parser.add_argument("--study-mode", action="store_true", help="Generate vocab + Anki")
+    parser.add_argument("--config", default="config.yaml", help="Path to config file")
+    args = parser.parse_args()
+
+    config = load_config(args.config)
+    base_output_dir = args.output or config["paths"]["output_dir"]
+    ensure_dir(base_output_dir)
+
+    inputs = []
+
+    if args.input:
+        inputs.extend(args.input)
+
+    if args.input_file:
+        inputs.extend(load_inputs_from_file(args.input_file))
+
+    if args.input_dir:
+        p = Path(args.input_dir)
+        exts = {".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".wav", ".flac", ".opus"}
+        for f in sorted(p.iterdir()):
+            if f.is_file() and f.suffix.lower() in exts:
+                inputs.append(str(f))
+
+    seen = set()
+    deduped = []
+    for item in inputs:
+        if item not in seen:
+            deduped.append(item)
+            seen.add(item)
+    inputs = deduped
+
+    if not inputs:
+        raise SystemExit("No inputs provided. Use --input, --input-file, or --input-dir.")
+
+    study_mode = args.study_mode or config["study"]["enabled"]
+
+    print(f"[BATCH] {len(inputs)} item(s) to process")
+
+    batch_start = time.perf_counter()
+    summaries = []
+
+    for idx, item in enumerate(inputs, start=1):
+        print(f"\n### Item {idx}/{len(inputs)}")
+        try:
+            timings = process_one(item, base_output_dir, config, study_mode)
+            summaries.append((item, timings, None))
+        except Exception as e:
+            print(f"[ERROR] Failed for {item}: {e}")
+            summaries.append((item, None, str(e)))
+
+    batch_total = time.perf_counter() - batch_start
+
+    print("\n========== BATCH SUMMARY ==========")
+    for item, timings, err in summaries:
+        name = output_name_for_input(item)
+        if err is not None:
+            print(f"{name:<20} ERROR: {err}")
+        else:
+            print(
+                f"{name:<20} "
+                f"download={fmt_seconds(timings['download_or_resolve'])} | "
+                f"audio={fmt_seconds(timings['audio_extract'])} | "
+                f"asr={fmt_seconds(timings['transcription'])} | "
+                f"refine={fmt_seconds(timings['refine'])} | "
+                f"export={fmt_seconds(timings['export'])} | "
+                f"translate={fmt_seconds(timings['translate'])} | "
+                f"study={fmt_seconds(timings['study'])} | "
+                f"total={fmt_seconds(timings['total'])}"
+            )
+
+    print("-----------------------------------")
+    print(f"BATCH TOTAL: {fmt_seconds(batch_total)}")
+    print("[BATCH DONE]")
+
+
+if __name__ == "__main__":
+    main()

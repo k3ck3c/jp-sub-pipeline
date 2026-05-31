@@ -1,0 +1,58 @@
+import re
+import time
+from faster_whisper import WhisperModel
+
+
+def clean_japanese_text(text: str) -> str:
+    text = text.strip()
+    text = re.sub(r"\s+", "", text)
+    text = text.replace("。。", "。")
+    text = text.replace("、、", "、")
+    return text
+
+
+def transcribe_japanese(audio_path, model_name="medium", device="auto", beam_size=5, vad_filter=False):
+    print(f"[ASR] Loading model={model_name}, device={device}, vad_filter={vad_filter}")
+    model = WhisperModel(model_name, device=device, compute_type="auto")
+
+    print(f"[ASR] Transcribing: {audio_path}")
+    start_time = time.perf_counter()
+
+    segments, info = model.transcribe(
+        audio_path,
+        language="ja",
+        task="transcribe",
+        vad_filter=vad_filter,
+        language=language,
+        beam_size=beam_size,
+        condition_on_previous_text=True
+    )
+
+    results = []
+    count = 0
+    last_log = time.perf_counter()
+
+    for seg in segments:
+        text = clean_japanese_text(seg.text)
+        if text:
+            results.append({
+                "start": seg.start,
+                "end": seg.end,
+                "text": text
+            })
+            count += 1
+
+            now = time.perf_counter()
+            if count % 10 == 0 or (now - last_log) >= 10:
+                elapsed = now - start_time
+                print(
+                    f"[ASR] segments={count} "
+                    f"last={seg.start:.1f}s->{seg.end:.1f}s "
+                    f"elapsed={elapsed:.1f}s"
+                )
+                last_log = now
+
+    total_elapsed = time.perf_counter() - start_time
+    print(f"[ASR] Done. segments={count}, elapsed={total_elapsed:.1f}s")
+
+    return results

@@ -1,0 +1,14 @@
+services:
+  jpsub-local:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    image: jpsub:local
+    user: "${UID}:${GID}"
+    environment:
+      DEEPL_API_KEY: ${DEEPL_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      ASR_BACKEND: local
+      ANKI_CONNECT_ENABLED: "1"
+      ANKI_CONNECT_HOST: host.docker.internal
+      ANKI_CONNECT_PORT: "8765"
