@@ -381,6 +381,174 @@ jp_segments_bilingual.lua
 
 Et si `segments.fr.json` existe, elle active le mode JP + FR.
 
+### `fixartist`
+
+Corrige le nom d'un artiste dans `output/`.
+
+Usage :
+
+```bash
+fixartist <ancien_nom> <nouveau_nom>
+```
+
+Exemple :
+
+```bash
+fixartist unknown_artist Yumi_Arai
+```
+
+La fonction :
+
+1. déplace les dossiers de chansons de l'ancien artiste vers le nouveau ;
+2. évite d'écraser une chanson déjà présente ;
+3. supprime l'ancien dossier s'il est vide ;
+4. ajoute une correspondance dans :
+
+```text
+artists_map.yaml
+```
+
+Exemple ajouté :
+
+```yaml
+unknown_artist: Yumi_Arai
+```
+
+---
+
+### `listartists`
+
+Liste les artistes disponibles dans le dossier `output/`.
+
+```bash
+listartists
+```
+
+Exemple :
+
+```text
+Hajime_Chitose
+Yumi_Arai
+unknown_artist
+```
+
+---
+
+### Autocomplétion de `playartist`
+
+Le script active l'autocomplétion Bash pour `playartist`.
+
+Exemple :
+
+```bash
+playartist Yu<TAB>
+```
+
+peut compléter automatiquement :
+
+```bash
+playartist Yumi_Arai
+```
+
+---
+
+### `fixold`
+
+Convertit les anciens dossiers de sortie vers le nouveau format attendu par le mode apprentissage MPV.
+
+Usage :
+
+```bash
+fixold
+```
+
+La fonction parcourt :
+
+```text
+output/<ARTISTE>/<VIDEO_ID>/
+```
+
+et reconstruit certains fichiers manquants.
+
+#### Génération de `segments.json`
+
+Si le dossier contient :
+
+```text
+subtitles.jp.srt
+```
+
+mais pas :
+
+```text
+segments.json
+```
+
+alors `fixold` crée :
+
+```text
+segments.json
+segments_refined.json
+```
+
+à partir des sous-titres japonais.
+
+#### Génération de `segments.fr.json`
+
+Si le dossier contient :
+
+```text
+subtitles.fr.srt
+```
+
+mais pas :
+
+```text
+segments.fr.json
+```
+
+alors `fixold` crée :
+
+```text
+segments.fr.json
+```
+
+à partir des sous-titres français.
+
+#### Génération de `subtitles.jp.kanji.srt`
+
+Si le dossier contient :
+
+```text
+subtitles.jp.srt
+```
+
+mais pas :
+
+```text
+subtitles.jp.kanji.srt
+```
+
+alors `fixold` crée une version simplifiée des sous-titres japonais.
+
+Cette version garde uniquement la ligne principale du bloc SRT, utile pour éviter certains doublons ou lignes furigana dans MPV.
+
+---
+
+## Résumé des commandes utiles
+
+| Commande                   | Usage                                                           |
+| -------------------------- | --------------------------------------------------------------- |
+| `jpsub1 URL`               | Lance le pipeline sur une vidéo                                 |
+| `playlast`                 | Lit la dernière vidéo générée                                   |
+| `learnlast`                | Lit la dernière vidéo en mode apprentissage japonais            |
+| `learnlastfr`              | Lit la dernière vidéo en mode apprentissage japonais + français |
+| `playartist`               | Affiche les artistes et permet de choisir une chanson           |
+| `playartist Yumi_Arai`     | Liste les chansons de l'artiste indiqué                         |
+| `playdir DOSSIER`          | Lit directement un dossier de sortie                            |
+| `fixartist ancien nouveau` | Corrige/regroupe un artiste                                     |
+| `listartists`              | Liste tous les artistes disponibles                             |
+| `fixold`                   | Convertit les anciens dossiers au nouveau format                |
 
 ---
 
