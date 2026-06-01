@@ -523,6 +523,11 @@ Si le dossier contient :
 subtitles.jp.srt
 ```
 
+
+
+## Demo: playartist
+
+![playartist](docs/demos/playartist.svg)
 mais pas :
 
 ```text
