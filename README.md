@@ -37,6 +37,14 @@ https://www.deepl.com/pro-api
 
 Puis renseigner :
 
+DEEPL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Sans clé DeepL, les traductions françaises seront désactivées.
+
+
+### Hugging Face
+
 ```envHugging Face (recommandé)
 
 Créer un token sur Hugging Face :
@@ -48,12 +56,6 @@ Puis renseigner :
 HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxx
 
 Le token permet au pipeline de télécharger automatiquement les modèles IA nécessaires.
-DEEPL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-Sans clé DeepL, les traductions françaises seront désactivées.
-
-
 
 
 ### AnkiConnect
