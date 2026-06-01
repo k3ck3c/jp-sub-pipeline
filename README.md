@@ -1,7 +1,9 @@
 # jp-sub-pipeline
 récupérer des chansons japonaises, générer des sous-titres français et japonais (avec kanjis et hitagani) et les afficher dans mpv
 # JP Subtitle Pipeline (Docker v2)
+## Demo: playartist
 
+![playartist](docs/demos/playartist.svg)
 Pipeline automatisé pour :
 
 * Télécharger une vidéo YouTube
@@ -523,11 +525,6 @@ Si le dossier contient :
 subtitles.jp.srt
 ```
 
-
-
-## Demo: playartist
-
-![playartist](docs/demos/playartist.svg)
 mais pas :
 
 ```text
