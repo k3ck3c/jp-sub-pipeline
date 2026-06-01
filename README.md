@@ -11,7 +11,9 @@ les exemples de Flashcards anki sont dans
 Pipeline automatisé pour :
 
 * Télécharger une vidéo YouTube
-* Extraire l'audio# Configuration
+* Extraire l'audio
+*
+* # Configuration
 
 ## Prérequis
 
@@ -36,7 +38,7 @@ Créer une clé API sur :
 https://www.deepl.com/pro-api
 
 Puis renseigner :
-
+```
 DEEPL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
@@ -46,7 +48,7 @@ Sans clé DeepL, les traductions françaises seront désactivées.
 ### Hugging Face
 
 ```envHugging Face (recommandé)
-
+```
 Créer un token sur Hugging Face :
 
 https://huggingface.co/settings/tokens
