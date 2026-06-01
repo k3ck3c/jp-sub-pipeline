@@ -10,3 +10,12 @@ cookies/
 __pycache__/
 *.pyc
 .cache/
+
+# Fichiers temporaires / sauvegardes
+*~
+#*#
+*_old
+*.bak
+*.orig
+main[0-9]*.py
+*.yaml1
