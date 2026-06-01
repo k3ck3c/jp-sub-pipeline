@@ -19,3 +19,4 @@ __pycache__/
 *.orig
 main[0-9]*.py
 *.yaml1
+*.cast
