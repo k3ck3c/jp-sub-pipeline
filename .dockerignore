@@ -16,7 +16,9 @@ cache/
 *.mp3
 *.srt
 *.json
-
+*~
+*_old
+*.yaml1
 .env
 venv/
 .venv/
