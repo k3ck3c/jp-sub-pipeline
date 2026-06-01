@@ -3,6 +3,8 @@ récupérer des chansons japonaises, générer des sous-titres français et japo
 
 réviser les kanjis avec Anki
 
+https://apps.ankiweb.net
+
 # JP Subtitle Pipeline (Docker v2)
 ## Demo: playartist
 
