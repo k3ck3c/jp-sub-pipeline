@@ -7,6 +7,7 @@ récupérer des chansons japonaises, générer des sous-titres français et japo
 
 les exemples de Flashcards anki sont dans
 ![flashcards Anki](docs/images/anki-cards.png)
+
 Pipeline automatisé pour :
 
 * Télécharger une vidéo YouTube
