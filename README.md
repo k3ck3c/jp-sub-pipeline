@@ -11,13 +11,89 @@ les exemples de Flashcards anki sont dans
 Pipeline automatisé pour :
 
 * Télécharger une vidéo YouTube
-* Extraire l'audio
+* Extraire l'audio# Configuration
+
+## Prérequis
+
+* Docker et Docker Compose
+* Un compte DeepL (optionnel mais recommandé)
+* Anki Desktop avec AnkiConnect (optionnel)
+
+## Configuration du fichier `.env`
+
+Copier le fichier d'exemple :
+
+```bash
+cp .env.example .env
+```
+
+Puis modifier les variables selon votre configuration.
+
+### DeepL
+
+Créer une clé API sur :
+
+https://www.deepl.com/pro-api
+
+Puis renseigner :
+
+```env
+DEEPL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Sans clé DeepL, les traductions françaises seront désactivées.
+
+### AnkiConnect
+
+Installer Anki :
+
+https://apps.ankiweb.net/
+
+Puis installer l'extension AnkiConnect :
+
+https://ankiweb.net/shared/info/2055492159
+
+Vérifier que le service répond :
+
+```bash
+curl http://localhost:8765
+```
+
+Variables :
+
+```env
+ANKI_CONNECT_ENABLED=1
+ANKI_CONNECT_URL=http://host.docker.internal:8765
+```
+
+### Cookies YouTube (optionnel)
+
+Certaines vidéos nécessitent des cookies YouTube.
+
+Exporter les cookies dans :
+
+```text
+cookies/youtube-cookies.txt
+```
+
+Le pipeline les utilisera automatiquement.
+
+## Exemple complet
+
+```env
+DEEPL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
+ANKI_CONNECT_ENABLED=1
+ANKI_CONNECT_URL=http://host.docker.internal:8765
+```
+
 * Générer des sous-titres japonais (Whisper)
 * Raffiner les segments
 * Traduire en français (DeepL)
 * Générer des clips audio MP3
 * Créer des cartes Anki via AnkiConnect
 * Produire un vocabulaire d'étude
+
+
 
 ## Installation
 
