@@ -246,6 +246,8 @@ def detect_artist(input_value: str, overrides_path="artists_map.yaml"):
     if not artist:
         artist = "unknown_artist"
 
+    if artist in overrides:
+        artist = overrides[artist]
     return artist, (info.get("id") or video_id), {
         "source": "auto",
         "title": info.get("title"),

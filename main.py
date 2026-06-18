@@ -1,3 +1,5 @@
+
+from modules.metadata import detect_artist
 import subprocess
 from modules.metadata import looks_like_japanese_song
 import os
@@ -142,7 +144,6 @@ def process_one(input_value: str, base_output_dir: str, config: dict, study_mode
     print(f"\n===== Processing: {input_value}")
 
     artist, video_id, meta = detect_artist(input_value)
-
     title = meta.get("title", "") or ""
     channel = meta.get("uploader", "") or meta.get("channel", "") or ""
 
@@ -242,7 +243,7 @@ def process_one(input_value: str, base_output_dir: str, config: dict, study_mode
         else:
             print("[CACHE] Using cached raw transcription")
         timings["asr"] = time.perf_counter() - t0
-    
+            
         # 4. refine
         refined_cache = os.path.join(output_dir, "segments_refined.json")
         t0 = time.perf_counter()
@@ -280,20 +281,25 @@ def process_one(input_value: str, base_output_dir: str, config: dict, study_mode
     
             try:
                 if meta.get("title"):
-                    title_fr = translate_title(meta["title"], deepl_key)
-                    meta["title_fr"] = title_fr
-                    meta["display_title"] = f"{meta['title']} _ {title_fr}"
+                    jp_title = meta.get("title", "")
+                    song_title = jp_title.split(" - ", 1)[1] if " - " in jp_title else jp_title
+                    fr_title = translate_title(song_title, deepl_key)
+                    
+                    meta["title_fr"] = fr_title
+
+                    if fr_title and fr_title != jp_title:
+                        meta["display_title"] = f"{jp_title} ({fr_title})"
+                    else:
+                        meta["display_title"] = jp_title
                 else:
                     meta["title_fr"] = ""
                     meta["display_title"] = video_id
+
             except Exception as e:
                 print(f"[Translate title] Error: {e}")
                 meta["title_fr"] = ""
                 meta["display_title"] = meta.get("title") or video_id
-    
-                title = meta.get("title", "") or ""
-                channel = meta.get("uploader", "") or meta.get("channel", "") or ""
-    
+
                 print("[DEBUG] title =", repr(title))
                 print("[DEBUG] channel =", repr(channel))
                 print("[DEBUG] looks_like_japanese_song =", looks_like_japanese_song(title, channel))
