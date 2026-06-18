@@ -669,3 +669,20 @@ Ou pour forcer une reconstruction complète :
 ```bash
 docker compose build --no-cache jpsub-local
 ```
+---
+
+## Maintenance
+
+Le projet utilise `yt-dlp`, qui évolue fréquemment pour suivre les changements de YouTube.
+
+En cas d'erreur de téléchargement ou d'avertissement sur une version ancienne de `yt-dlp`, reconstruire l'image Docker :
+
+```bash
+docker compose build --no-cache jpsub-local
+```
+
+pour connaitre la version de yt-dlp
+```
+docker compose run --rm jpsub-local yt-dlp --version
+
+```
