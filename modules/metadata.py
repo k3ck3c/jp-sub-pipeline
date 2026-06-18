@@ -180,6 +180,12 @@ def parse_artist_from_title(title: str):
 
     # Format fréquent : "Song Title / Artist"
     # Exemple : "Umareta Machi De / Yumi Arai"
+        # Format : 元ちとせ「この街」 / HAJIME CHITOSE「KONO MACHI」
+    m = re.match(r"^\s*([^「『【/]+)\s*[「『【]", title)
+    if m:
+        candidate = m.group(1).strip()
+        if 1 <= len(candidate) <= 80:
+            return candidate
     if "/" in title or "／" in title:
         sep = "/" if "/" in title else "／"
         left, right = [p.strip() for p in title.split(sep, 1)]

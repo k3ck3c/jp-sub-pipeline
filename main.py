@@ -68,6 +68,37 @@ def safe_tag(text: str) -> str:
     text = re.sub(r"_+", "_", text)
     return text.strip("._") or "unknown"
 
+def extract_song_title_for_translation(title: str) -> str:
+    import re
+
+    if not title:
+        return ""
+
+    # Titres japonais entre guillemets/brackets
+    patterns = [
+        r"「(.+?)」",
+        r"『(.+?)』",
+        r"【(.+?)】",
+    ]
+
+    for pat in patterns:
+        m = re.search(pat, title)
+        if m:
+            return m.group(1).strip()
+
+    # Format "Artiste - Titre" : garder la partie droite
+    if " - " in title:
+        return title.split(" - ", 1)[1].strip()
+
+    # Format "Titre / Artiste" : garder la partie gauche
+    if "/" in title:
+        return title.split("/", 1)[0].strip()
+
+    # Nettoyage basique des mentions fréquentes
+    cleaned = re.sub(r"\b(MUSIC VIDEO|MV|Cover|cover|カバー|歌詞付き|歌詞付|Live|Karaoke|No Guide Melody)\b", "", title, flags=re.I)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -｜|　")
+
+    return cleaned or title
 
 def output_name_for_input(input_value: str) -> str:
     if input_value.startswith("http://") or input_value.startswith("https://"):
@@ -282,7 +313,7 @@ def process_one(input_value: str, base_output_dir: str, config: dict, study_mode
             try:
                 if meta.get("title"):
                     jp_title = meta.get("title", "")
-                    song_title = jp_title.split(" - ", 1)[1] if " - " in jp_title else jp_title
+                    song_title = extract_song_title_for_translation(jp_title)
                     fr_title = translate_title(song_title, deepl_key)
                     
                     meta["title_fr"] = fr_title
