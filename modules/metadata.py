@@ -68,6 +68,19 @@ def looks_like_japanese_song(title, channel=""):
 
     return False
 
+
+def clean_artist_name(artist: str) -> str:
+    if not artist:
+        return artist
+
+    artist = artist.strip()
+
+    # Supprime les mentions LIVE / MV / cover entre parenthèses japonaises ou normales
+    artist = re.sub(r"[（(]\s*(LIVE|Live|live|MV|Music Video|cover|Cover|カバー)\s*[）)]", "", artist)
+
+    return artist.strip()
+
+
 def looks_like_japanese_transcript(segments, min_japanese_chars=20):
     text = ""
 
@@ -208,9 +221,32 @@ def parse_artist_from_title(title: str):
             candidate = m.group(1).strip()
             if 1 <= len(candidate) <= 80:
                 return candidate
+    m = re.search(
+    r"\bby\s+(.+?)(?:\s+English Lyrics|\s+Lyrics|\s+歌詞|$)",
+    title,
+    re.I
+    )
+    if m:
+        candidate = m.group(1).strip()
+        if 1 <= len(candidate) <= 80:
+            return candidate
 
     return None
 
+
+def clean_artist_name(artist: str) -> str:
+    if not artist:
+        return artist
+
+    artist = artist.strip()
+
+    artist = re.sub(
+        r"[（(]\s*(LIVE|Live|live|MV|Music Video|cover|Cover|カバー)\s*[）)]",
+        "",
+        artist,
+    )
+
+    return artist.strip()
 
 def detect_artist(input_value: str, overrides_path="artists_map.yaml"):
     video_id = extract_video_id(input_value)
@@ -252,8 +288,11 @@ def detect_artist(input_value: str, overrides_path="artists_map.yaml"):
     if not artist:
         artist = "unknown_artist"
 
+    artist = clean_artist_name(artist)
+
     if artist in overrides:
         artist = overrides[artist]
+
     return artist, (info.get("id") or video_id), {
         "source": "auto",
         "title": info.get("title"),
