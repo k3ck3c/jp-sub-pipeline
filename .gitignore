@@ -20,3 +20,8 @@ __pycache__/
 main[0-9]*.py
 *.yaml1
 *.cast
+
+# Emacs
+*~
+\#*\#
+.\#*
