@@ -22,7 +22,7 @@ def download_video(url, output_dir):
         "--no-continue",
         "--no-part",
         "--no-playlist",
-        "--js-runtimes", "node",
+        "--js-runtimes", "node:/usr/bin/node",
         "-o", output_template,
         url,
     ]
