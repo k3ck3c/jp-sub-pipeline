@@ -1,17 +1,22 @@
-
-from modules.metadata import detect_artist
 import subprocess
-from modules.metadata import looks_like_japanese_song
 import os
 import re
 import time
 import argparse
 from pathlib import Path
+
 import requests
 import yaml
+
+from modules.metadata import (
+    detect_artist,
+    artist_output_dir,
+    looks_like_japanese_song,
+    load_artist_overrides,
+    detect_song_alias,
+)
 from modules.furigana import furigana_reading_line
 from modules.black_video import create_black_video_from_audio
-from modules.metadata import detect_artist, artist_output_dir, detect_song_alias
 from modules.utils import ensure_dir
 from modules.downloader import resolve_input
 from modules.audio import extract_audio
@@ -178,10 +183,12 @@ def process_one(input_value: str, base_output_dir: str, config: dict, study_mode
     title = meta.get("title", "") or ""
     channel = meta.get("uploader", "") or meta.get("channel", "") or ""
 
-    if not looks_like_japanese_song(title, channel):
+    overrides = load_artist_overrides()
+
+    if not looks_like_japanese_song(title, channel) and video_id not in overrides:
         print(f"[SKIP] Not detected as Japanese song: {title}")
         return
-
+    
     output_dir = artist_output_dir(base_output_dir, artist, video_id)
     ensure_dir(output_dir)
 
