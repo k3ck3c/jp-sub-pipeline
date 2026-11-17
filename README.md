@@ -1,25 +1,49 @@
-# Appli web : atelier d'étude
+# jpsub : apprendre le japonais avec ses chansons
 
-Apprendre des mots japonais en écoutant ses chansons et en comprenant chaque ligne.
-Le code vit dans le package `jpsub/` : la même pipeline sert la ligne de commande et l'appli web.
+Écouter une chanson, comprendre chaque ligne et apprendre ses mots : la pipeline télécharge
+la vidéo YouTube, transcrit les paroles (Whisper), ajoute les furigana, traduit en français (DeepL)
+et prépare des cartes Anki ; l'appli web (« atelier d'étude ») sert à tout parcourir.
+
+![flashcards Anki](docs/images/anki_Chitose_Hajime_sen_no_yoru_to_sen_no_hiru.png)
 
 ## Lancer
 
+Prérequis : [uv](https://docs.astral.sh/uv/getting-started/installation/), `ffmpeg` (`sudo apt install ffmpeg`)
+et, pour les cartes, [Anki](https://apps.ankiweb.net/) avec l'extension [AnkiConnect](https://ankiweb.net/shared/info/2055492159).
+
 ```bash
-./start.sh           # Docker : construit si besoin, démarre, ouvre http://localhost:8000
-./start.sh local     # sans Docker : crée .venv et installe les dépendances au premier lancement
-./start.sh stop      # arrête le conteneur
-./start.sh logs      # journaux
-./start.sh rebuild   # reconstruit l'image (mise à jour du code ou de yt-dlp)
+./start.sh           # lance Anki si besoin, puis l'appli en arrière-plan, et ouvre http://localhost:8000
+./start.sh stop      # arrête l'appli (Anki reste ouvert)
+./start.sh restart   # après une modification du code
+./start.sh logs      # suit le journal (data/jpsub.log)
+./start.sh status    # l'appli et Anki tournent-ils ?
+./start.sh fg        # au premier plan, journal dans le terminal (Ctrl+C pour arrêter)
+./start.sh update    # met à jour les dépendances (yt-dlp en tête) et uv.lock
 ```
 
-`./start.sh` lance aussi Anki s'il ne répond pas déjà sur le port 8765 (AnkiConnect),
-pour que les cartes puissent être envoyées ; `./start.sh anki` ne lance qu'Anki,
-`JPSUB_NO_ANKI=1 ./start.sh` s'en passe. L'extension AnkiConnect doit écouter sur `0.0.0.0`
-(`webBindAddress`) pour être joignable depuis le conteneur.
+Au premier lancement, uv installe Python 3.12 et les dépendances figées dans `uv.lock`
+(dans `.venv/`), et crée `.env` à partir de `.env.example`. Les modèles Whisper sont gardés dans `data/models/`.
 
-Le conteneur redémarre tout seul avec Docker tant qu'il n'a pas été arrêté par `./start.sh stop`.
-Mettez votre clé DeepL dans `.env` (créé au premier lancement à partir de `.env.example`).
+`./start.sh` lance Anki s'il ne répond pas déjà sur le port 8765 ; `./start.sh anki` ne lance qu'Anki,
+`JPSUB_NO_ANKI=1 ./start.sh` s'en passe, `JPSUB_ANKI_CMD=…` indique où il est installé.
+L'appli tourne sur la même machine qu'Anki : AnkiConnect peut écouter sur `127.0.0.1` (sa valeur par défaut).
+
+## Configuration
+
+`.env` (jamais commité) :
+
+```env
+DEEPL_API_KEY=…   # https://www.deepl.com/pro-api — sans clé, pas de traduction ni de sens des mots
+HF_TOKEN=…        # facultatif : https://huggingface.co/settings/tokens (téléchargements de modèles plus rapides)
+OPENAI_API_KEY=…  # seulement avec asr.backend: api (uv sync --extra api)
+```
+
+- `config.yaml` : modèle Whisper (`asr.model`, `small` par défaut ; `medium` est plus précis mais plus lent),
+  seuils de détection de langue, découpage des sous-titres.
+- `cookies/youtube-cookies.txt` (facultatif) : cookies YouTube pour les vidéos qui en demandent ;
+  la pipeline travaille sur une copie, le fichier n'est jamais modifié.
+- `artists_map.yaml` : corriger l'artiste d'une vidéo (`ID_YOUTUBE: Nom`) ; une vidéo listée ici est
+  aussi considérée comme japonaise.
 
 ## Ce que fait l'appli
 
@@ -49,367 +73,55 @@ et garde la meilleure probabilité « ja ». Réglages dans `config.yaml` (`lang
 Le résultat et sa raison sont enregistrés dans `metadata.detected.json` (clé `language`).
 
 ```bash
-python -m jpsub detect-lang output/Artiste/ID/audio.wav   # tester la détection
-python -m jpsub run --input URL --force-ja                 # forcer le traitement
+uv run python -m jpsub detect-lang output/Artiste/ID/audio.wav   # tester la détection
+uv run python -m jpsub run --input URL --force-ja                 # forcer le traitement
 ```
 
 ## Ligne de commande
 
-Les anciennes commandes fonctionnent toujours (`main.py` délègue à `jpsub`) :
+Sans l'appli web, la même pipeline se lance en ligne de commande (`main.py` délègue à `jpsub`) :
 
 ```bash
-docker compose run --rm jpsub-local --input "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run python -m jpsub run --input "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run python -m jpsub run --input-file batch.txt     # une URL par ligne
 ```
 
 Chaque étape est mise en cache : relancer une vidéo reprend là où elle s'était arrêtée,
 et changer de modèle Whisper ou de réglages de sous-titres relance seulement les étapes concernées.
 `--anki-only` reste accepté pour compatibilité, mais n'est plus nécessaire.
+L'envoi automatique des cartes de phrases vers Anki se désactive avec `ANKI_CONNECT_ENABLED=0` dans `.env`.
 
----
-
-# jp-sub-pipeline
-récupérer des chansons japonaises, générer des sous-titres français et japonais (avec kanjis et hiragana) et les afficher dans mpv
-
-réviser les kanjis avec Anki
-
-https://apps.ankiweb.net
-
-# JP Subtitle Pipeline (Docker v2)
-## Demo: playartist
-
-![playartist](docs/demos/playartist.svg)
-
-les exemples de Flashcards anki sont dans
-![flashcards Anki](docs/images/anki-cards.png)
-
-Pipeline automatisé pour :
-
-* Télécharger une vidéo YouTube
-* Extraire l'audio
-*
-* # Configuration
-
-## Prérequis
-
-* Docker et Docker Compose
-* Un compte DeepL (optionnel mais recommandé)
-* Anki Desktop avec AnkiConnect (optionnel)
-
-## Configuration du fichier `.env`
-
-Copier le fichier d'exemple :
-
-```bash
-cp .env.example .env
-```
-
-Puis modifier les variables selon votre configuration.
-
-### DeepL
-
-Créer une clé API sur :
-
-https://www.deepl.com/pro-api
-
-Puis renseigner :
-```
-DEEPL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-Sans clé DeepL, les traductions françaises seront désactivées.
-
-
-### Hugging Face
-
-```envHugging Face (recommandé)
-```
-Créer un token sur Hugging Face :
-
-https://huggingface.co/settings/tokens
-
-Puis renseigner :
-
-HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxx
-
-Le token permet au pipeline de télécharger automatiquement les modèles IA nécessaires.
-
-
-### AnkiConnect
-
-Installer Anki :
-
-https://apps.ankiweb.net/
-
-Puis installer l'extension AnkiConnect :
-
-https://ankiweb.net/shared/info/2055492159
-
-Vérifier que le service répond :
-
-```bash
-curl http://localhost:8765
-```
-
-Variables :
-
-```env
-ANKI_CONNECT_ENABLED=1
-ANKI_CONNECT_URL=http://host.docker.internal:8765
-```
-
-### Cookies YouTube (optionnel)
-
-Certaines vidéos nécessitent des cookies YouTube.
-
-Exporter les cookies dans :
-
-```text
-cookies/youtube-cookies.txt
-```
-
-Le pipeline les utilisera automatiquement.
-
-## Exemple complet
-
-```env
-DEEPL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
-ANKI_CONNECT_ENABLED=1
-ANKI_CONNECT_URL=http://host.docker.internal:8765
-```
-
-* Générer des sous-titres japonais (Whisper)
-* Raffiner les segments
-* Traduire en français (DeepL)
-* Générer des clips audio MP3
-* Créer des cartes Anki via AnkiConnect
-* Produire un vocabulaire d'étude
-
-
-
-## Installation
-
-### Construction de l'image Docker
-
-```bash
-docker compose build jpsub-local
-```
-
-### Vérification d'AnkiConnect
-
-Lancer Anki puis vérifier :
-
-```bash
-curl http://localhost:8765
-```
-
-Réponse attendue :
-
-```json
-{"error":"unsupported action","result":null}
-```
-
----
-
-# Utilisation
-
-## Traitement d'une vidéo
-
-```bash
-docker compose run --rm \
-  -e ANKI_CONNECT_ENABLED=1 \
-  jpsub-local \
-  --input "https://www.youtube.com/watch?v=VIDEO_ID"
-```
-
-Étapes exécutées :
-
-1. Téléchargement YouTube
-2. Extraction audio
-3. Génération vidéo noire (optionnelle)
-4. Transcription Whisper
-5. Raffinement des sous-titres
-6. Traduction DeepL
-7. Génération des clips MP3
-8. Analyse vocabulaire
-9. Envoi dans Anki
-
----
-
-## Traitement de plusieurs vidéos
-
-Créer :
-
-```text
-batch.txt
-```
-
-Exemple :
-
-```text
-https://www.youtube.com/watch?v=AAAA
-https://www.youtube.com/watch?v=BBBB
-https://www.youtube.com/watch?v=CCCC
-```
-
-Puis :
-
-```bash
-docker compose run --rm \
-  -e ANKI_CONNECT_ENABLED=1 \
-  jpsub-local \
-  --input-file batch.txt
-```
-
----
-
-# Mode reprise Anki
-
-## Cas d'usage
-
-Tu as traité une vidéo mais :
-
-* Anki n'était pas lancé
-* AnkiConnect était indisponible
-* Le pipeline a échoué au moment de l'envoi Anki
-
-Dans ce cas il n'est pas nécessaire de retraiter la vidéo.
-
-Le mode `--anki-only` réutilise les fichiers déjà générés.
-
----
-
-## Commande
-
-```bash
-docker compose run --rm \
-  -e ANKI_CONNECT_ENABLED=1 \
-  jpsub-local \
-  --input "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --anki-only
-```
-
----
-
-## Ce qui est ignoré
-
-Le mode Anki-only saute :
-
-* téléchargement YouTube
-* extraction audio
-* génération vidéo noire
-* transcription Whisper
-* raffinement
-* export SRT/VTT
-* traduction DeepL
-
----
-
-## Ce qui est exécuté
-
-Le mode Anki-only :
-
-1. Recharge les segments depuis le cache
-2. Recharge les clips audio existants
-3. Recharge les traductions existantes
-4. Génère les cartes Anki
-5. Envoie les cartes via AnkiConnect
-
----
-
-## Fichiers requis
-
-Dans le répertoire :
-
-```text
-output/<ARTIST>/<VIDEO_ID>/
-```
-
-Doivent exister :
-
-```text
-segments_refined.json
-anki_media/
-```
-
-Optionnel :
-
-```text
-segments_fr.json
-```
-
-Si `segments_fr.json` est absent :
-
-```text
-[Anki Only] Missing segments_fr.json, using segments_refined.json without FR cache
-```
-
-Le traitement continue.
-
----
-
-## Exemple réel
-
-```bash
-docker compose run --rm \
-  -e ANKI_CONNECT_ENABLED=1 \
-  jpsub-local \
-  --input "https://www.youtube.com/watch?v=lr7ZFhVe8X8" \
-  --anki-only
-```
-
-Résultat :
-
-```text
-[Anki] Sending 31 notes in batch...
-[Anki] Added: 22
-[Anki] Skipped duplicates: 9
-[Anki] Errors: 0
-```
-
----
-
-# Structure des sorties
+## Structure des sorties
 
 ```text
 output/
 └── Yumi_Arai/
-    └── khXFf4dXjk8/
-        ├── audio.wav
-        ├── black_video.mp4
-        ├── segments_refined.json
-        ├── subtitles.jp.srt
-        ├── subtitles.fr.srt
-        ├── metadata.detected.json
-        ├── vocab.json
-        ├── anki_vocab.csv
-        └── anki_media/
-            ├── khXFf4dXjk8_0001.mp3
-            ├── khXFf4dXjk8_0002.mp3
-            └── ...
+    └── oJ5uZLFHZTs/
+        ├── source_audio.m4a          # audio téléchargé
+        ├── audio.wav                 # 16 kHz mono pour Whisper
+        ├── language.json             # détection de langue sur l'audio
+        ├── segments_raw.json         # transcription brute
+        ├── segments.json             # lignes + lectures (+ segments_refined.json, identique)
+        ├── segments.fr.json          # traduction
+        ├── subtitles.jp.srt / .vtt, subtitles.fr.srt, transcript.txt
+        ├── metadata.detected.json    # titre, artiste, décision de langue
+        ├── vocab.json, anki_vocab.csv
+        ├── waveform.json             # forme d'onde pour l'atelier
+        └── anki_media/               # un clip MP3 par ligne
+data/
+├── jpsub.sqlite3                     # jobs, sens des mots, mots connus
+├── jpsub.log                         # journal de l'appli
+└── models/                           # modèles Whisper
 ```
 
----
+## Anciennes fonctions shell (lecture dans mpv)
 
-# Gestion des doublons Anki
+Ces fonctions (hors du dépôt) datent de la version Docker. Pour `jpsub1`, remplacer dans
+`~/.bash_helpers/jpsub.sh` la ligne `COMPOSE=…` par :
 
-Le pipeline vérifie :
-
-```text
-Can add: X
-Pre-skipped duplicates: Y
-Added: Z
-Skipped duplicates: W
-Errors: 0
+```bash
+COMPOSE="uv --directory $BASE run python -m jpsub run"
 ```
-
-Les cartes déjà présentes ne sont pas recréées.
-
-
-
-
-
-
-## Fonctions shell utiles
 
 Les fonctions suivantes peuvent être placées dans :
 
@@ -429,7 +141,7 @@ Recharger ensuite le shell :
 source ~/.bashrc
 ```
 
-### `jpsub1`
+#### `jpsub1`
 
 Lance le pipeline sur une vidéo YouTube.
 
@@ -437,7 +149,7 @@ Lance le pipeline sur une vidéo YouTube.
 jpsub1 "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-### `playlast`
+#### `playlast`
 
 Lit la dernière vidéo traitée.
 
@@ -463,7 +175,7 @@ sinon elle utilise :
 source_video.*
 ```
 
-### `learnlast`
+#### `learnlast`
 
 Lit la dernière vidéo en mode apprentissage japonais.
 
@@ -478,7 +190,7 @@ subtitles.jp.srt
 segments.json
 ```
 
-### `learnlastfr`
+#### `learnlastfr`
 
 Lit la dernière vidéo en mode apprentissage japonais + français.
 
@@ -494,7 +206,7 @@ segments.fr.json
 
 Sinon le mode japonais seul est utilisé.
 
-### `playartist`
+#### `playartist`
 
 Permet de choisir un artiste puis une chanson.
 
@@ -526,7 +238,7 @@ all
 
 Avec `all`, toutes les chansons de l’artiste sont lues.
 
-### `playdir`
+#### `playdir`
 
 Lit directement un dossier vidéo du pipeline.
 
@@ -554,7 +266,7 @@ jp_segments_bilingual.lua
 
 Et si `segments.fr.json` existe, elle active le mode JP + FR.
 
-### `fixartist`
+#### `fixartist`
 
 Corrige le nom d'un artiste dans `output/`.
 
@@ -589,7 +301,7 @@ unknown_artist: Yumi_Arai
 
 ---
 
-### `listartists`
+#### `listartists`
 
 Liste les artistes disponibles dans le dossier `output/`.
 
@@ -607,7 +319,7 @@ unknown_artist
 
 ---
 
-### Autocomplétion de `playartist`
+#### Autocomplétion de `playartist`
 
 Le script active l'autocomplétion Bash pour `playartist`.
 
@@ -625,7 +337,7 @@ playartist Yumi_Arai
 
 ---
 
-### `fixold`
+#### `fixold`
 
 Convertit les anciens dossiers de sortie vers le nouveau format attendu par le mode apprentissage MPV.
 
@@ -708,7 +420,7 @@ Cette version garde uniquement la ligne principale du bloc SRT, utile pour évit
 
 ---
 
-## Résumé des commandes utiles
+### Résumé des commandes utiles
 
 | Commande                   | Usage                                                           |
 | -------------------------- | --------------------------------------------------------------- |
@@ -723,35 +435,10 @@ Cette version garde uniquement la ligne principale du bloc SRT, utile pour évit
 | `listartists`              | Liste tous les artistes disponibles                             |
 | `fixold`                   | Convertit les anciens dossiers au nouveau format                |
 
----
-
-# Mise à jour après modification du code
-
-Toujours reconstruire l'image :
+## Mise à jour
 
 ```bash
-docker compose build jpsub-local
-```
-
-Ou pour forcer une reconstruction complète :
-
-```bash
-docker compose build --no-cache jpsub-local
-```
----
-
-## Maintenance
-
-Le projet utilise `yt-dlp`, qui évolue fréquemment pour suivre les changements de YouTube.
-
-En cas d'erreur de téléchargement ou d'avertissement sur une version ancienne de `yt-dlp`, reconstruire l'image Docker :
-
-```bash
-docker compose build --no-cache jpsub-local
-```
-
-pour connaitre la version de yt-dlp
-```
-docker compose run --rm jpsub-local yt-dlp --version
-
+git pull
+./start.sh restart        # uv installe ce qui a changé dans uv.lock
+./start.sh update         # quand YouTube casse yt-dlp : met à jour les dépendances
 ```
