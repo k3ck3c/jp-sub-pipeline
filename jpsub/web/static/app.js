@@ -183,46 +183,46 @@ async function renderSong(artistDir, vid) {
   audio.src = song.audio ? `/media/${encodeURIComponent(artistDir)}/${encodeURIComponent(vid)}/${encodeURIComponent(song.audio)}` : "";
   audio.playbackRate = prefs.rate;
 
-  const chip = (label, pressed, onclick, id) =>
-    h("button", { type: "button", class: "chip", id, "aria-pressed": String(!!pressed), onclick }, label);
+  const chip = (label, pressed, onclick, id, title) =>
+    h("button", { type: "button", class: "chip", id, title, "aria-label": title ? `${title} (${label})` : null,
+      "aria-pressed": String(!!pressed), onclick }, label);
   const rates = [1, 0.85, 0.75, 0.6];
 
+  // Barre compacte et collante : titre sur une ligne, puis lecture + forme d'onde + options sur une ligne
   view.replaceChildren(h("div", { class: "studio" },
-    h("div", { class: "studio-head" },
-      h("a", { class: "crumb", href: `#/artist/${encodeURIComponent(song.artist_dir)}` }, `← ${song.artist}`),
-      h("h1", { class: "jp" }, song.title),
-      song.title_fr ? h("span", { class: "who" }, song.title_fr) : null,
-      h("span", { class: "spacer" }),
-      h("span", { class: "state", id: "studio-state" })),
     h("div", { class: "sticky-tools" },
-      h("div", { class: "wave" },
-        h("canvas", { id: "wave", role: "slider", "aria-label": "Position dans la chanson", tabindex: "0",
-          "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": "0", onclick: onWaveClick, onkeydown: onWaveKey }),
-        h("div", { class: "ticks", id: "ticks" })),
-      h("div", { class: "transport" },
+      h("div", { class: "studio-head" },
+        h("a", { class: "crumb", href: `#/artist/${encodeURIComponent(song.artist_dir)}` }, `← ${song.artist}`),
+        h("h1", { class: "jp", title: song.title }, song.title),
+        song.title_fr ? h("span", { class: "who", title: song.title_fr }, song.title_fr) : null,
+        h("span", { class: "state", id: "studio-state" })),
+      h("div", { class: "player-row" },
         h("button", { type: "button", class: "play", id: "play-btn", "aria-label": "Lecture", onclick: togglePlay }, svgIcon("play")),
         h("span", { class: "time", id: "time" }, "0:00 / 0:00"),
+        h("div", { class: "wave" },
+          h("canvas", { id: "wave", role: "slider", "aria-label": "Position dans la chanson", tabindex: "0",
+            "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": "0", onclick: onWaveClick, onkeydown: onWaveKey })),
         h("div", { class: "toggles" },
-          chip("Boucle sur la ligne", false, (e) => {
+          chip("Boucle", false, (e) => {
             state.loopLine = state.loopLine === null ? Math.max(0, state.current) : null;
             e.currentTarget.setAttribute("aria-pressed", String(state.loopLine !== null));
-          }, "loop-btn"),
-          chip(`Vitesse ${String(prefs.rate).replace(".", ",")}×`, false, (e) => {
+          }, "loop-btn", "Répéter la ligne en cours"),
+          chip(`${String(prefs.rate).replace(".", ",")}×`, false, (e) => {
             prefs.rate = rates[(rates.indexOf(prefs.rate) + 1) % rates.length] || 1;
             savePrefs(); audio.playbackRate = prefs.rate;
-            e.currentTarget.textContent = `Vitesse ${String(prefs.rate).replace(".", ",")}×`;
-          }),
+            e.currentTarget.textContent = `${String(prefs.rate).replace(".", ",")}×`;
+          }, null, "Vitesse de lecture"),
           chip("Furigana", prefs.furigana, (e) => {
             prefs.furigana = !prefs.furigana; savePrefs();
             e.currentTarget.setAttribute("aria-pressed", String(prefs.furigana));
             document.body.classList.toggle("hide-furigana", !prefs.furigana);
-          }),
-          chip("Cacher le français", prefs.frHidden, (e) => {
+          }, null, "Afficher la lecture au-dessus des kanji"),
+          chip("Cacher FR", prefs.frHidden, (e) => {
             prefs.frHidden = !prefs.frHidden; savePrefs();
             e.currentTarget.setAttribute("aria-pressed", String(prefs.frHidden));
             state.revealed.clear();
             renderSegments();
-          })))),
+          }, null, "Cacher la traduction française (révéler ligne par ligne)")))),
     h("div", { class: "workspace" },
       h("section", { class: "segments", "aria-label": "Paroles" },
         h("div", { class: "seg-head" }, h("span", {}, "Temps"), h("span", {}, "Japonais"), h("span", {}, "Français")),
@@ -245,9 +245,12 @@ let toolsObserver = null;
 function watchStickyTools() {
   const tools = $(".sticky-tools");
   if (!tools) return;
+  const root = document.documentElement;
   const update = () => {
-    const top = parseFloat(getComputedStyle(tools).top) || 0;
-    document.documentElement.style.setProperty("--stick-top", `${Math.round(top + tools.offsetHeight + 8)}px`);
+    const topbar = $(".topbar");
+    const barH = topbar && getComputedStyle(topbar).position === "sticky" ? topbar.offsetHeight : 0;
+    root.style.setProperty("--topbar-h", `${barH}px`);
+    root.style.setProperty("--stick-top", `${Math.round(barH + tools.offsetHeight + 8)}px`);
   };
   toolsObserver?.disconnect();
   toolsObserver = new ResizeObserver(update);
@@ -361,7 +364,7 @@ function renderVocab() {
       h("div", { class: "toggles" }, filter("Avec kanji", "onlyKanji"), filter("Nouveaux pour moi", "onlyNew")),
       h("div", { class: "vocab-actions" },
         h("button", { type: "button", class: "btn primary", disabled: !nChecked, onclick: sendToAnki },
-          nChecked ? `Envoyer ${nChecked} carte${nChecked > 1 ? "s" : ""} vers Anki` : "Cochez des mots à apprendre"),
+          nChecked ? `Envoyer ${nChecked} carte${nChecked > 1 ? "s" : ""} vers Anki` : "Cochez des mots"),
         h("button", { type: "button", class: "btn", disabled: !nChecked, onclick: downloadApkg,
           title: "Télécharger un paquet .apkg à importer dans Anki", "aria-label": "Télécharger le paquet .apkg" }, ".apkg")),
       h("div", { class: "row" },
@@ -548,8 +551,6 @@ function drawWaveBase() {
     ctx.fillRect(i * bw, (hgt - bh) / 2, Math.max(1, bw - 0.5), bh);
   });
   state.waveImg = off;
-  const ticks = $("#ticks");
-  if (ticks) ticks.replaceChildren(...[0, 0.25, 0.5, 0.75, 1].map((f) => h("span", {}, fmtTime(f * d))));
 }
 
 function drawWaveFrame(t) {

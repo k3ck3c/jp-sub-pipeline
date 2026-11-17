@@ -46,7 +46,7 @@ rt { font-size: 0.5em; color: var(--muted); font-weight: 400; }
 /* --- barre du haut --- */
 .topbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px;
-  padding: 12px 32px; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 8px 32px; background: var(--surface); border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 5;
 }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; color: var(--ink); text-decoration: none; }
@@ -104,20 +104,23 @@ rt { font-size: 0.5em; color: var(--muted); font-weight: 400; }
   border: 1px dashed var(--field); border-radius: var(--radius); }
 
 /* --- atelier d'étude --- */
-.studio { display: flex; flex-direction: column; gap: 14px; }
-.studio-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
-.studio-head .crumb { color: var(--muted); text-decoration: none; font-size: 13px; }
-.studio-head h1 { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
-.studio-head .who { color: var(--muted); }
-.studio-head .state { font-size: 13px; color: var(--muted); }
-.sticky-tools { position: sticky; top: 64px; z-index: 3; background: var(--bg); padding: 6px 0 8px; display: flex; flex-direction: column; gap: 10px; }
-.wave { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px 6px; }
-.wave canvas { display: block; width: 100%; height: 64px; cursor: pointer; }
-.wave .ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.transport { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.play { width: 44px; height: 44px; border-radius: 999px; border: none; background: var(--ink); color: var(--bg);
+.studio { display: flex; flex-direction: column; gap: 12px; }
+/* Barre compacte et collante : titre + lecteur + options (≈ 90 px) */
+.sticky-tools { position: sticky; top: var(--topbar-h, 57px); z-index: 3; display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; }
+.studio-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.studio-head .crumb { flex: none; color: var(--muted); text-decoration: none; font-size: 12px; }
+.studio-head h1 { margin: 0; font-size: 16px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.studio-head .who { color: var(--muted); font-size: 12px; min-width: 0; flex: 1 1 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.studio-head .state { flex: none; margin-left: auto; font-size: 12px; color: var(--muted); }
+.player-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.play { width: 36px; height: 36px; border-radius: 999px; border: none; background: var(--ink); color: var(--bg);
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
-.time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 92px; }
+.time { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 78px; }
+.wave { flex: 1 1 220px; min-width: 160px; }
+.wave canvas { display: block; width: 100%; height: 36px; cursor: pointer; border-radius: 6px; }
+.player-row .toggles { flex: none; gap: 6px; }
+.player-row .chip { min-height: 32px; padding: 0 10px; font-size: 12px; }
 .toggles { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .workspace { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
