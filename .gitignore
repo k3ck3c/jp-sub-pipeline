@@ -25,3 +25,10 @@ main[0-9]*.py
 *~
 \#*\#
 .\#*
+
+# Appli web
+data/
+*.sqlite3*
+
+# uv
+.venv/

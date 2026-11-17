@@ -6,6 +6,14 @@ asr:
   vad_filter: false
   language: ja
 
+# Détection de langue : les métadonnées YouTube ne servent que d'indice,
+# Whisper écoute 3 extraits de 30 s (à 30 %, 50 %, 70 % du morceau).
+language_check:
+  enabled: true
+  accept: 0.5        # probabilité « ja » >= 0.5 : japonais confirmé
+  reject: 0.2        # < 0.2 : rejeté (bouton « Forcer le japonais » dans l'appli, ou --force-ja)
+  meta_reject_score: -3
+
 subtitles:
   max_line_len: 22
   min_duration: 0.8
@@ -15,6 +23,4 @@ study:
 
 paths:
   output_dir: ./output
-
-volumes:
-  - ./config.yaml:/app/config.yaml:ro
+  db: ./data/jpsub.sqlite3
