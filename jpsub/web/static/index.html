@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jpsub — bibliothèque</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231A1A1F'/%3E%3Ctext x='16' y='22' font-size='17' text-anchor='middle' fill='white'%3E字%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/"><span class="logo" aria-hidden="true">字</span>jpsub</a>
+    <nav class="mainnav" aria-label="Navigation principale">
+      <a href="#/" data-nav="library">Bibliothèque</a>
+      <a href="#/jobs" data-nav="jobs">Jobs <span class="pill" id="jobs-badge" hidden></span></a>
+    </nav>
+    <div class="spacer"></div>
+    <label class="visually-hidden" for="search">Rechercher</label>
+    <input id="search" type="search" placeholder="Artiste, titre…" autocomplete="off">
+    <button class="btn primary" id="add-btn" type="button">+ Ajouter une vidéo</button>
+  </header>
+
+  <div class="layout">
+    <nav class="artists" aria-label="Artistes">
+      <div class="section-label">Artistes</div>
+      <div id="artist-list"></div>
+    </nav>
+    <main id="view" tabindex="-1"></main>
+  </div>
+
+  <dialog id="add-dialog">
+    <form method="dialog" id="add-form">
+      <h2>Ajouter des vidéos</h2>
+      <label for="add-urls">Une URL YouTube (ou un chemin de fichier) par ligne</label>
+      <textarea id="add-urls" rows="4" placeholder="https://www.youtube.com/watch?v=…" required></textarea>
+      <label class="check"><input type="checkbox" id="add-force"> Forcer le japonais (ignorer la détection de langue)</label>
+      <div class="row end">
+        <button class="btn" value="cancel" type="button" id="add-cancel">Annuler</button>
+        <button class="btn primary" value="ok" type="submit">Lancer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <audio id="audio" preload="metadata"></audio>
+  <script src="/app.js"></script>
+</body>
+</html>

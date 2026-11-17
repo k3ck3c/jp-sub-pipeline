@@ -1,3 +1,52 @@
+# Appli web (bibliothèque + lecteur)
+
+Le code vit dans le package `jpsub/` : la même pipeline sert la ligne de commande et l'appli web.
+
+```bash
+docker compose up -d jpsub-web      # puis ouvrir http://localhost:8000
+```
+
+Sans Docker (dans un venv avec `requirements-local.txt`) :
+
+```bash
+python -m jpsub serve               # http://127.0.0.1:8000
+```
+
+- **Bibliothèque** : toutes les chansons de `output/<artiste>/<id>/`, y compris celles produites par l'ancienne pipeline.
+- **Lecteur** : paroles synchronisées avec furigana et traduction FR, clic sur une ligne pour y aller, boucle sur la ligne, vitesse réduite, vidéo YouTube en option. Clavier : espace (lecture/pause), ← → (ligne précédente/suivante).
+- **Mot** : clic sur un mot → lecture, forme de base, sens (DeepL, mis en cache), nombre d'occurrences dans vos chansons, bouton « Ajouter à Anki ».
+- **Jobs** : coller des URL, suivre les 12 étapes en direct, relancer une étape en échec, « Forcer le japonais » pour une vidéo rejetée.
+
+Architecture : un seul process (API FastAPI + worker en thread + SQLite dans `data/jpsub.sqlite3`).
+La table `jobs` sert de file d'attente ; les dossiers `output/` restent la source de vérité.
+
+## Détection du japonais
+
+Les métadonnées YouTube (titre, tags, langue déclarée) sont souvent incomplètes ou fausses.
+Elles ne servent plus qu'à écarter les cas évidents (tutoriel, podcast…).
+La décision vient de l'audio : Whisper écoute 3 extraits de 30 s (à 30 %, 50 % et 70 % du morceau)
+et garde la meilleure probabilité « ja ». Réglages dans `config.yaml` (`language_check`).
+Le résultat et sa raison sont enregistrés dans `metadata.detected.json` (clé `language`).
+
+```bash
+python -m jpsub detect-lang output/Artiste/ID/audio.wav   # tester la détection
+python -m jpsub run --input URL --force-ja                 # forcer le traitement
+```
+
+## Ligne de commande
+
+Les anciennes commandes fonctionnent toujours (`main.py` délègue à `jpsub`) :
+
+```bash
+docker compose run --rm jpsub-local --input "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+Chaque étape est mise en cache : relancer une vidéo reprend là où elle s'était arrêtée,
+et changer de modèle Whisper ou de réglages de sous-titres relance seulement les étapes concernées.
+`--anki-only` reste accepté pour compatibilité, mais n'est plus nécessaire.
+
+---
+
 # jp-sub-pipeline
 récupérer des chansons japonaises, générer des sous-titres français et japonais (avec kanjis et hiragana) et les afficher dans mpv
 

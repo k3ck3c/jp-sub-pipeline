@@ -1,28 +1,42 @@
+x-jpsub: &jpsub
+  build:
+    context: .
+    dockerfile: Dockerfile.local
+  image: jpsub:local
+  user: "${UID}:${GID}"
+  environment:
+    # Modèles Whisper gardés dans ./.cache pour ne pas les retélécharger à chaque lancement
+    HF_HOME: /app/.cache/hf
+    XDG_CACHE_HOME: /app/.cache/xdg
+    DEEPL_API_KEY: ${DEEPL_API_KEY:-}
+    HF_TOKEN: ${HF_TOKEN:-}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ASR_BACKEND: ${ASR_BACKEND:-local}
+    ANKI_CONNECT_ENABLED: ${ANKI_CONNECT_ENABLED:-1}
+    ANKI_CONNECT_HOST: host.docker.internal
+    ANKI_CONNECT_PORT: "8765"
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  volumes:
+    - ./output:/app/output
+    - ./input:/app/input
+    - ./data:/app/data
+    - ./cookies:/cookies:ro
+    - ./artists_map.yaml:/app/artists_map.yaml:ro
+    - ./song_aliases.json:/app/song_aliases.json:ro
+    - ./config.yaml:/app/config.yaml:ro
+    - ./batch.txt:/app/batch.txt
+    - ./.cache:/app/.cache
+
 services:
+  # Appli web : http://localhost:8000 (API + worker + SQLite dans un seul conteneur)
+  jpsub-web:
+    <<: *jpsub
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  # Ligne de commande, comme avant : docker compose run --rm jpsub-local --input URL
   jpsub-local:
-    build:
-      context: .
-      dockerfile: Dockerfile.local
-    image: jpsub:local
-    user: "${UID}:${GID}"
-    environment:
-      HF_HOME: /tmp/hf
-      XDG_CACHE_HOME: /tmp/xdg
-      TRANSFORMERS_CACHE: /tmp/hf/transformers
-      HUGGINGFACE_HUB_CACHE: /tmp/hf/hub
-      DEEPL_API_KEY: ${DEEPL_API_KEY:-}
-      HF_TOKEN: ${HF_TOKEN:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ASR_BACKEND: local
-      ANKI_CONNECT_ENABLED: "1"
-      ANKI_CONNECT_HOST: host.docker.internal
-      ANKI_CONNECT_PORT: "8765"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ./output:/app/output
-      - ./input:/app/input
-      - ./artists_map.yaml:/app/artists_map.yaml:ro
-      - ./config.yaml:/app/config.yaml:ro
-      - ./batch.txt:/app/batch.txt
-      - ./.cache:/app/.cache
+    <<: *jpsub

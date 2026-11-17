@@ -4,6 +4,7 @@ unidic-lite
 PyYAML
 yt-dlp[default]
 requests
-pykakasi
 pysubs2
 openai
+fastapi>=0.115
+uvicorn>=0.30
