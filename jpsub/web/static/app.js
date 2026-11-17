@@ -230,6 +230,7 @@ async function renderSong(artistDir, vid) {
       h("aside", { class: "vocab", "aria-label": "Vocabulaire", id: "vocab" }))));
 
   document.body.classList.toggle("hide-furigana", !prefs.furigana);
+  watchStickyTools();
   renderSegments();
   renderVocab();
   updateHeadState();
@@ -237,6 +238,21 @@ async function renderSong(artistDir, vid) {
   loadWaveform();
   fetchMeanings();
   tick();
+}
+
+/** Le panneau Vocabulaire se colle sous la barre (forme d'onde + lecture) et tient dans la fenêtre. */
+let toolsObserver = null;
+function watchStickyTools() {
+  const tools = $(".sticky-tools");
+  if (!tools) return;
+  const update = () => {
+    const top = parseFloat(getComputedStyle(tools).top) || 0;
+    document.documentElement.style.setProperty("--stick-top", `${Math.round(top + tools.offsetHeight + 8)}px`);
+  };
+  toolsObserver?.disconnect();
+  toolsObserver = new ResizeObserver(update);
+  toolsObserver.observe(tools);
+  update();
 }
 
 /* --- en-tête : lignes à vérifier --------------------------------------------- */
@@ -334,27 +350,32 @@ function renderVocab() {
   const selected = state.selectedWord ? all.find((v) => v.word === state.selectedWord) : null;
   const nChecked = state.checked.size;
 
-  // replaceChildren affiche « null » en texte : on retire les éléments absents (fiche mot fermée)
+  // Actions et fiche du mot en haut du panneau (toujours visibles) ; seule la liste des mots défile.
+  const prevScroll = $("#vocab-scroll")?.scrollTop || 0;
+  // replaceChildren affiche « null » en texte : on retire la fiche mot quand elle est fermée
   panel.replaceChildren(...[
     h("div", { class: "vocab-head" },
       h("div", { class: "row" },
         h("h2", {}, "Mots de la chanson"),
         h("span", { class: "muted", style: "font-size:12px" }, `${items.length} / ${all.length}`)),
-      h("div", { class: "toggles" }, filter("Avec kanji", "onlyKanji"), filter("Nouveaux pour moi", "onlyNew"))),
-    selected ? wordCard(selected) : null,
-    h("div", { class: "vocab-list", id: "vocab-list" },
-      items.length ? items.map(vocabItem) : h("div", { class: "empty", style: "border:none" }, "Aucun mot avec ces filtres.")),
-    h("div", { class: "vocab-foot" },
+      h("div", { class: "toggles" }, filter("Avec kanji", "onlyKanji"), filter("Nouveaux pour moi", "onlyNew")),
+      h("div", { class: "vocab-actions" },
+        h("button", { type: "button", class: "btn primary", disabled: !nChecked, onclick: sendToAnki },
+          nChecked ? `Envoyer ${nChecked} carte${nChecked > 1 ? "s" : ""} vers Anki` : "Cochez des mots à apprendre"),
+        h("button", { type: "button", class: "btn", disabled: !nChecked, onclick: downloadApkg,
+          title: "Télécharger un paquet .apkg à importer dans Anki", "aria-label": "Télécharger le paquet .apkg" }, ".apkg")),
       h("div", { class: "row" },
         h("button", { type: "button", class: "linkbtn", onclick: () => {
           for (const v of visibleVocab()) if (!v.status) state.checked.add(v.word);
           renderVocab();
         } }, "Cocher les nouveaux"),
-        nChecked ? h("button", { type: "button", class: "linkbtn", onclick: () => { state.checked.clear(); renderVocab(); } }, "Tout décocher") : null),
-      h("button", { type: "button", class: "btn primary", disabled: !nChecked, onclick: sendToAnki },
-        nChecked ? `Envoyer ${nChecked} carte${nChecked > 1 ? "s" : ""} vers Anki` : "Cochez des mots à apprendre"),
-      h("button", { type: "button", class: "btn", disabled: !nChecked, onclick: downloadApkg }, "Télécharger le paquet .apkg")),
+        nChecked ? h("button", { type: "button", class: "linkbtn", onclick: () => { state.checked.clear(); renderVocab(); } }, "Tout décocher") : null)),
+    selected ? wordCard(selected) : null,
+    h("div", { class: "vocab-scroll", id: "vocab-scroll" },
+      h("div", { class: "vocab-list", id: "vocab-list" },
+        items.length ? items.map(vocabItem) : h("div", { class: "empty", style: "border:none" }, "Aucun mot avec ces filtres."))),
   ].filter(Boolean));
+  $("#vocab-scroll").scrollTop = prevScroll;
 }
 
 function vocabItem(v) {
@@ -370,11 +391,7 @@ function vocabItem(v) {
 }
 
 function renderVocabFoot() {
-  // Re-rendu léger : seul le pied dépend des cases cochées
-  const scroll = $("#vocab-list")?.scrollTop || 0;
-  renderVocab();
-  const list = $("#vocab-list");
-  if (list) list.scrollTop = scroll;
+  renderVocab(); // garde la position de défilement de la liste
 }
 
 const cssId = (w) => Array.from(w).map((c) => c.codePointAt(0).toString(16)).join("-");
@@ -411,7 +428,14 @@ function selectWord(word, opts = {}) {
   if (!state.selectedWord) return;
   const v = state.song.vocab.find((x) => x.word === state.selectedWord);
   if (!opts.fromLyrics && v) document.getElementById(`seg-${v.lines[0]}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-  document.getElementById(`v-${cssId(state.selectedWord)}`)?.scrollIntoView({ block: "nearest" });
+  // Fait défiler la liste seule (pas la page) jusqu'au mot choisi
+  const item = document.getElementById(`v-${cssId(state.selectedWord)}`);
+  const list = $("#vocab-scroll");
+  if (item && list) {
+    if (item.offsetTop < list.scrollTop) list.scrollTop = item.offsetTop;
+    else if (item.offsetTop + item.offsetHeight > list.scrollTop + list.clientHeight)
+      list.scrollTop = item.offsetTop + item.offsetHeight - list.clientHeight;
+  }
 }
 
 async function setStatus(v, status) {
