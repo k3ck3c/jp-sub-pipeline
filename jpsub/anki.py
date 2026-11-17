@@ -94,8 +94,46 @@ def export_clips(audio_path: str, segments, clips_dir: str, prefix: str, log=pri
     return out
 
 
+def add_notes_safely(notes: list) -> dict:
+    """Ajoute des notes en ignorant les doublons.
+
+    - Les doublons DANS le lot (refrain répété) sont retirés : canAddNotes ne les voit pas,
+      et addNotes refuse alors tout le lot.
+    - Les doublons avec la collection sont filtrés par canAddNotes.
+    - Si addNotes échoue quand même, on ajoute note par note pour garder les bonnes.
+    """
+    seen, unique = set(), []
+    for n in notes:
+        key = (n["deckName"], n["modelName"], next(iter(n["fields"].values()), ""))
+        if key not in seen:
+            seen.add(key)
+            unique.append(n)
+    in_batch_dups = len(notes) - len(unique)
+
+    can_add = anki_request("canAddNotes", {"notes": unique}) or []
+    to_add = [n for n, ok in zip(unique, can_add) if ok]
+    duplicates = in_batch_dups + len(unique) - len(to_add)
+    added = errors = 0
+    if to_add:
+        try:
+            result = anki_request("addNotes", {"notes": to_add}) or []
+            added = sum(1 for r in result if r)
+            errors = len(to_add) - added
+        except RuntimeError:
+            for n in to_add:
+                try:
+                    anki_request("addNote", {"note": n})
+                    added += 1
+                except RuntimeError as e:
+                    if "duplicate" in str(e).lower():
+                        duplicates += 1
+                    else:
+                        errors += 1
+    return {"added": added, "duplicates": duplicates, "errors": errors}
+
+
 def push_sentence_cards(segments, fr_segments, artist, title, video_id, tag, log=print) -> dict:
-    """Envoie une carte par ligne. Les doublons sont filtrés UNE fois par canAddNotes."""
+    """Envoie une carte par ligne (une seule par ligne identique, ex. refrain)."""
     deck = f"JP::{artist}"
     ensure_deck(deck)
     ensure_model()
@@ -118,11 +156,7 @@ def push_sentence_cards(segments, fr_segments, artist, title, video_id, tag, log
             "options": {"allowDuplicate": False},
         })
 
-    can_add = anki_request("canAddNotes", {"notes": notes}) or []
-    to_add = [n for n, ok in zip(notes, can_add) if ok]
-    result = anki_request("addNotes", {"notes": to_add}) if to_add else []
-    added = sum(1 for r in result or [] if r)
-    stats = {"added": added, "duplicates": len(notes) - len(to_add), "errors": len(to_add) - added}
+    stats = add_notes_safely(notes)
     log(f"[Anki] ajoutées={stats['added']} doublons={stats['duplicates']} erreurs={stats['errors']}")
     return stats
 
@@ -145,8 +179,4 @@ def push_word_cards(cards: list, deck: str) -> dict:
             "tags": ["jp-sub", "word"],
             "options": {"allowDuplicate": False},
         })
-    can_add = anki_request("canAddNotes", {"notes": notes}) or []
-    to_add = [n for n, ok in zip(notes, can_add) if ok]
-    result = anki_request("addNotes", {"notes": to_add}) if to_add else []
-    added = sum(1 for r in result or [] if r)
-    return {"added": added, "duplicates": len(notes) - len(to_add), "errors": len(to_add) - added}
+    return add_notes_safely(notes)

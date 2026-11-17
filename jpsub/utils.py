@@ -45,12 +45,25 @@ def extract_video_id(input_value: str) -> str:
 
 
 def run(cmd, log=print) -> None:
+    """Exécute une commande en recopiant sa sortie dans le journal (visible dans l'appli)."""
     log(f"[CMD] {' '.join(str(c) for c in cmd)}")
-    subprocess.run(cmd, check=True)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+    tail = []
+    for line in proc.stdout:
+        line = line.rstrip()
+        if line:
+            log(f"  {line}")
+            tail = (tail + [line])[-5:]
+    if proc.wait() != 0:
+        raise RuntimeError(f"{cmd[0]} a échoué (code {proc.returncode}) : " + (" / ".join(tail) or "pas de message"))
 
 
 def run_capture(cmd) -> str:
-    return subprocess.run(cmd, check=True, text=True, capture_output=True).stdout
+    res = subprocess.run(cmd, text=True, capture_output=True, errors="replace")
+    if res.returncode != 0:
+        errors = [l for l in res.stderr.splitlines() if l.startswith(("ERROR", "WARNING"))] or res.stderr.splitlines()
+        raise RuntimeError(f"{cmd[0]} a échoué (code {res.returncode}) : " + " / ".join(errors[-3:]))
+    return res.stdout
 
 
 def read_json(path, default=None):

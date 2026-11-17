@@ -12,8 +12,14 @@ _model_key = None
 _lock = threading.Lock()
 
 
+_JP = r"[　-ヿ㐀-鿿＀-￯]"
+
+
 def clean_japanese_text(text: str) -> str:
-    text = re.sub(r"\s+", "", (text or "").strip())
+    """Retire les espaces entre caractères japonais, mais garde ceux entre mots latins
+    (« Velvet Easter » ne doit pas devenir « VelvetEaster »)."""
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    text = re.sub(rf"(?<={_JP}) (?={_JP})", "", text)
     return text.replace("。。", "。").replace("、、", "、")
 
 

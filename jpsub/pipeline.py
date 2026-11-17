@@ -77,6 +77,8 @@ def st_metadata(ctx: Context):
     ctx.artist, ctx.video_id, ctx.info = artist, video_id, info
     ctx.out_dir = metadata.artist_output_dir(ctx.cfg["paths"]["output_dir"], artist, video_id)
     ensure_dir(ctx.out_dir)
+    if info.get("metadata_error"):
+        ctx.log(f"[Meta] ATTENTION {info['metadata_error']}")
     ctx.log(f"[Meta] {info.get('title')!r} — artiste={artist} — dossier={ctx.out_dir}")
 
     overrides = metadata.load_artist_overrides(ctx.cfg["paths"]["artists_map"])
@@ -109,11 +111,17 @@ def st_download(ctx: Context):
         return "cache"
     cmd = ["yt-dlp", "-f", "140/139/18/bestaudio", "--retries", "30", "--fragment-retries", "30",
            "--socket-timeout", "30", "--no-continue", "--no-part", "--no-playlist",
-           "--js-runtimes", "node", "-o", ctx.path("source_audio.%(ext)s")]
+           "--no-progress", "-o", ctx.path("source_audio.%(ext)s")]
     cookies = metadata.cookies_path()
     if cookies:
         cmd += ["--cookies", str(cookies)]
-    run(cmd + [ctx.input], log=ctx.log)
+    try:
+        run(cmd + [ctx.input], log=ctx.log)
+    except Exception:
+        # Un fichier laissé par un échec serait pris pour un téléchargement complet à la relance
+        for partial in glob.glob(ctx.path("source_audio.*")):
+            os.remove(partial)
+        raise
     files = glob.glob(ctx.path("source_audio.*"))
     if not files:
         raise FileNotFoundError("Audio téléchargé introuvable")
@@ -156,6 +164,7 @@ def st_language(ctx: Context):
 def st_transcribe(ctx: Context):
     a = ctx.cfg["asr"]
     fp = {k: a[k] for k in ("backend", "model", "beam_size", "vad_filter", "language")}
+    fp["clean"] = 2  # nettoyage du texte : espaces gardés entre mots latins
     if ctx.fresh("transcribe", ["segments_raw.json"], fp):
         ctx.raw_segments = read_json(ctx.path("segments_raw.json"))
         status = "cache"
@@ -186,12 +195,18 @@ def st_transcribe(ctx: Context):
 
 
 def st_refine(ctx: Context):
-    fp = {"subtitles": ctx.cfg["subtitles"], "v": 2}
+    # Dépend aussi de la transcription : une nouvelle transcription doit se propager
+    fp = {"subtitles": ctx.cfg["subtitles"], "v": 2, "raw": _fingerprint(ctx.raw_segments)}
     if ctx.fresh("refine", ["segments_refined.json", "segments.json"], fp):
         ctx.segments = read_json(ctx.path("segments_refined.json"))
         return "cache"
     s = ctx.cfg["subtitles"]
+    previous = read_json(ctx.path("segments_refined.json"), []) or []
+    reviewed = {seg["text"] for seg in previous if seg.get("reviewed")}
     ctx.segments = japanese.refine_segments(ctx.raw_segments, s["max_line_len"], s["min_duration"])
+    for seg in ctx.segments:  # garde les « C'est juste » des lignes inchangées
+        if seg["text"] in reviewed:
+            seg["reviewed"] = True
     write_json(ctx.segments, ctx.path("segments_refined.json"))
     write_json(ctx.segments, ctx.path("segments.json"))
     ctx.mark("refine", fp)
@@ -231,7 +246,13 @@ def st_translate(ctx: Context):
 
 
 def st_clips(ctx: Context):
+    # Les clips sont nommés par numéro de ligne : si les découpages changent, on les refait
+    fp = {"timings": _fingerprint([(seg["start"], seg["end"]) for seg in ctx.segments])}
+    if not ctx.fresh("clips", ["anki_media"], fp):
+        for old in glob.glob(ctx.path(os.path.join("anki_media", f"{glob.escape(ctx.video_id)}_*.mp3"))):
+            os.remove(old)
     ctx.clips = anki.export_clips(ctx.wav, ctx.segments, ctx.path("anki_media"), ctx.video_id, log=ctx.log)
+    ctx.mark("clips", fp)
 
 
 def st_vocab(ctx: Context):

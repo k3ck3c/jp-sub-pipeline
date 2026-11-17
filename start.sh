@@ -74,7 +74,12 @@ ensure_anki() {
 
 prepare() {
   # Les volumes Docker doivent exister avant le lancement, sinon Docker les crée en root.
-  mkdir -p output input data cookies .cache
+  mkdir -p output input data cookies
+  # Le conteneur tourne avec votre utilisateur : il doit pouvoir écrire dans ces dossiers
+  local d
+  for d in output data input; do
+    [ -w "$d" ] || fail "Le dossier $d/ n'est pas modifiable par $(id -un) (créé par root ?). Corrigez avec : sudo chown -R $(id -u):$(id -g) $d"
+  done
   [ -f batch.txt ] || touch batch.txt
   [ -f artists_map.yaml ] || echo "{}" > artists_map.yaml
   [ -f song_aliases.json ] || echo "{}" > song_aliases.json

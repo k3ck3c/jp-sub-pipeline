@@ -1,7 +1,10 @@
 """Métadonnées YouTube (yt-dlp -J) et détection de l'artiste."""
 
 import json
+import os
 import re
+import shutil
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -12,9 +15,17 @@ COOKIES_CANDIDATES = [Path("/cookies/youtube-cookies.txt"), Path("cookies/youtub
 
 
 def cookies_path():
+    """Copie modifiable des cookies YouTube.
+
+    yt-dlp réécrit le fichier de cookies en fin de commande : sur le fichier d'origine
+    (monté en lecture seule dans Docker) il échouait APRÈS avoir téléchargé.
+    On lui donne une copie temporaire, l'original n'est jamais modifié.
+    """
     for p in COOKIES_CANDIDATES:
         if p.exists():
-            return p
+            copy = Path(tempfile.gettempdir()) / f"jpsub-cookies-{os.getpid()}.txt"
+            shutil.copyfile(p, copy)
+            return copy
     return None
 
 
@@ -36,7 +47,8 @@ def fetch_yt_info(input_value: str) -> dict:
     cookies = cookies_path()
     if cookies:
         base += ["--cookies", str(cookies)]
-    commands = [base[:1] + ["--js-runtimes", "node"] + base[1:] + [input_value], base + [input_value]]
+    # Runtime JS : deno (installé avec yt-dlp[deno]) est utilisé par défaut par yt-dlp
+    commands = [base + [input_value]]
 
     last_error = None
     for cmd in commands:
@@ -57,9 +69,9 @@ def fetch_yt_info(input_value: str) -> dict:
                 "categories": data.get("categories") or [],
                 "description": (data.get("description") or "")[:2000],
             }
-        except Exception as e:  # yt-dlp change souvent : on essaie sans le runtime JS
+        except Exception as e:
             last_error = e
-    raise RuntimeError(f"yt-dlp metadata fetch failed: {last_error}")
+    raise RuntimeError(f"métadonnées YouTube indisponibles : {last_error}")
 
 
 def clean_artist_name(artist: str) -> str:

@@ -5,9 +5,9 @@ x-jpsub: &jpsub
   image: jpsub:local
   user: "${UID}:${GID}"
   environment:
-    # Modèles Whisper gardés dans ./.cache pour ne pas les retélécharger à chaque lancement
-    HF_HOME: /app/.cache/hf
-    XDG_CACHE_HOME: /app/.cache/xdg
+    # Modèles Whisper gardés dans ./data pour ne pas les retélécharger à chaque lancement
+    HF_HOME: /app/data/models
+    XDG_CACHE_HOME: /app/data/cache
     DEEPL_API_KEY: ${DEEPL_API_KEY:-}
     HF_TOKEN: ${HF_TOKEN:-}
     OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -26,7 +26,6 @@ x-jpsub: &jpsub
     - ./song_aliases.json:/app/song_aliases.json:ro
     - ./config.yaml:/app/config.yaml:ro
     - ./batch.txt:/app/batch.txt
-    - ./.cache:/app/.cache
 
 services:
   # Appli web : http://localhost:8000 (API + worker + SQLite dans un seul conteneur)

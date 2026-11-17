@@ -21,7 +21,7 @@ COPY requirements-local.txt /app/requirements-local.txt
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel && \
     /opt/venv/bin/pip install --no-cache-dir -r /app/requirements-local.txt
-RUN /opt/venv/bin/pip install --no-cache-dir yt-dlp[default]
+RUN /opt/venv/bin/pip install --no-cache-dir -U "yt-dlp[default,deno]"
 
 FROM python:3.12-slim AS runtime
 

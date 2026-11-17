@@ -1,8 +1,10 @@
 faster-whisper
+# PyAV 19 a retiré un paramètre utilisé par faster-whisper 1.2.x (decode_audio)
+av>=11,<19
 fugashi
 unidic-lite
 PyYAML
-yt-dlp[default]
+yt-dlp[default,deno]
 requests
 pysubs2
 openai
