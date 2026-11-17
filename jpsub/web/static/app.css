@@ -135,14 +135,9 @@ rt { font-size: 0.5em; color: var(--muted); font-weight: 400; }
 .seg .jpcol { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .seg .jp-line { font-size: 17px; line-height: 2.1; overflow-wrap: anywhere; }
 .seg .frcol { font-size: 13px; color: var(--ink); padding-top: 9px; overflow-wrap: anywhere; }
-.seg .frcol .stale { color: var(--warn-ink); font-size: 12px; display: block; }
 .seg .meta-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .flag { font-size: 12px; font-weight: 600; color: var(--err-ink); background: var(--err-soft); border-radius: 999px; padding: 2px 10px; }
-.edited { font-size: 11px; font-weight: 600; color: var(--ok-ink); background: var(--ok-soft); border-radius: 999px; padding: 2px 8px; }
 .linkbtn { border: none; background: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 4px 2px; min-height: 28px; }
-.edit-box { display: flex; gap: 6px; flex-wrap: wrap; }
-.edit-box input { flex: 1 1 220px; min-height: 40px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 8px;
-  background: var(--surface-2); font-size: 16px; }
 .reveal { border: 1px dashed var(--field); background: none; border-radius: 8px; color: var(--muted); font-size: 12px; padding: 6px 10px; cursor: pointer; }
 
 .w { border-radius: 4px; padding: 0 1px; cursor: pointer; border: none; background: none; font: inherit; color: inherit; line-height: inherit; }

@@ -1,4 +1,4 @@
-"""Atelier d'étude : corriger les paroles, comprendre les lignes, choisir les mots à apprendre.
+"""Atelier d'étude : vérifier les paroles à l'écoute, comprendre les lignes, choisir les mots à apprendre.
 
 Toutes les fonctions travaillent sur un dossier de chanson `output/<artiste>/<id>/`.
 """
@@ -10,7 +10,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import exporters, japanese, translate
 from .utils import read_json, write_json
 
 SEGMENT_FILES = ("segments_refined.json", "segments.json")
@@ -26,62 +25,11 @@ def load_fr(d: Path) -> list:
     return read_json(d / "segments.fr.json", []) or []
 
 
-def _save_segments(d: Path, segments: list) -> None:
-    for name in SEGMENT_FILES:
-        write_json(segments, d / name)
-    exporters.write_srt(segments, d / "subtitles.jp.srt")
-    exporters.write_vtt(segments, d / "subtitles.jp.vtt")
-    exporters.write_transcript(segments, d / "transcript.txt")
-    vocab = japanese.analyze_vocab(segments)
-    write_json(vocab, d / "vocab.json")
-    japanese.export_anki_csv(vocab, d / "anki_vocab.csv")
-
-
-def edit_line(d: Path, index: int, text: str) -> dict:
-    """Corrige le japonais d'une ligne : lectures recalculées, traduction marquée à refaire."""
-    segments = load_segments(d)
-    if not 0 <= index < len(segments):
-        raise IndexError(index)
-    text = text.strip()
-    old = segments[index]
-    if text == old.get("text"):
-        return old
-    keep = {k: old[k] for k in ("avg_logprob", "no_speech_prob") if k in old}
-    line = japanese.make_line(old["start"], old["end"], text, keep)
-    line.update(edited=True, reviewed=True, fr_stale=True, original_text=old.get("original_text", old.get("text")))
-    segments[index] = line
-    _save_segments(d, segments)
-    return line
-
-
 def set_reviewed(d: Path, index: int, reviewed: bool) -> None:
     segments = load_segments(d)
     segments[index]["reviewed"] = bool(reviewed)
     for name in SEGMENT_FILES:
         write_json(segments, d / name)
-
-
-def retranslate(d: Path, api_key: str, target_lang="FR") -> list:
-    """Retraduit seulement les lignes corrigées. Retourne les index retraduits."""
-    segments = load_segments(d)
-    todo = [i for i, s in enumerate(segments) if s.get("fr_stale")]
-    if not todo:
-        return []
-    fr = load_fr(d)
-    while len(fr) < len(segments):
-        s = segments[len(fr)]
-        fr.append({"start": s["start"], "end": s["end"], "text": ""})
-    context = " ".join(s["text"] for s in segments[:12])
-    texts = translate.translate_batch([segments[i]["text"] for i in todo], api_key,
-                                      target_lang=target_lang, context=context)
-    for i, t in zip(todo, texts):
-        fr[i] = {"start": segments[i]["start"], "end": segments[i]["end"], "text": t}
-        segments[i].pop("fr_stale", None)
-    write_json(fr, d / "segments.fr.json")
-    exporters.write_srt(fr, d / "subtitles.fr.srt", with_reading=False)
-    for name in SEGMENT_FILES:
-        write_json(segments, d / name)
-    return todo
 
 
 # --- forme d'onde --------------------------------------------------------------

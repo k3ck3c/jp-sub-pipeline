@@ -77,7 +77,7 @@ function savePrefs() { try { localStorage.setItem("jpsub.prefs", JSON.stringify(
 const state = {
   artists: [], songs: [], jobs: [], q: "",
   song: null, current: -1, loopLine: null,
-  selectedWord: null, checked: new Set(), editing: null, revealed: new Set(),
+  selectedWord: null, checked: new Set(), revealed: new Set(),
   wave: null, waveImg: null,
 };
 
@@ -177,7 +177,7 @@ async function renderSong(artistDir, vid) {
   catch (e) { view.replaceChildren(h("div", { class: "empty" }, `Chanson introuvable (${e.message}).`)); return; }
 
   stopStudio();
-  Object.assign(state, { song, current: -1, loopLine: null, selectedWord: null, editing: null });
+  Object.assign(state, { song, current: -1, loopLine: null, selectedWord: null });
   state.checked = new Set();
   state.revealed = new Set();
   audio.src = song.audio ? `/media/${encodeURIComponent(artistDir)}/${encodeURIComponent(vid)}/${encodeURIComponent(song.audio)}` : "";
@@ -193,8 +193,7 @@ async function renderSong(artistDir, vid) {
       h("h1", { class: "jp" }, song.title),
       song.title_fr ? h("span", { class: "who" }, song.title_fr) : null,
       h("span", { class: "spacer" }),
-      h("span", { class: "state", id: "studio-state" }),
-      h("button", { type: "button", class: "btn", id: "retranslate", onclick: retranslate }, "Retraduire les lignes corrigées")),
+      h("span", { class: "state", id: "studio-state" })),
     h("div", { class: "sticky-tools" },
       h("div", { class: "wave" },
         h("canvas", { id: "wave", role: "slider", "aria-label": "Position dans la chanson", tabindex: "0",
@@ -240,31 +239,12 @@ async function renderSong(artistDir, vid) {
   tick();
 }
 
-/* --- en-tête : lignes à vérifier, retraduction ---------------------------- */
+/* --- en-tête : lignes à vérifier --------------------------------------------- */
 function updateHeadState() {
-  const s = state.song;
-  const flagged = s.lines.filter((l) => l.flags.length).length;
-  const stale = s.lines.filter((l) => l.fr_stale).length;
-  const edited = s.lines.filter((l) => l.edited).length;
-  const parts = [];
-  if (flagged) parts.push(`${flagged} ligne${flagged > 1 ? "s" : ""} à vérifier`);
-  if (edited) parts.push(`${edited} corrigée${edited > 1 ? "s" : ""}`);
-  $("#studio-state").textContent = parts.join(" · ") || "Transcription vérifiée";
-  const btn = $("#retranslate");
-  btn.hidden = !stale;
-  btn.disabled = !s.translation_available;
-  btn.textContent = `Retraduire ${stale} ligne${stale > 1 ? "s" : ""} corrigée${stale > 1 ? "s" : ""}`;
-  btn.title = s.translation_available ? "" : "Clé DeepL absente";
-}
-
-async function retranslate() {
-  const btn = $("#retranslate");
-  btn.disabled = true;
-  try {
-    const res = await api.post(`${songUrl(state.song)}/retranslate`);
-    replaceSong(res.song);
-    toast(`${res.retranslated.length} ligne(s) retraduite(s)`);
-  } catch (e) { toast(e.message); btn.disabled = false; }
+  const flagged = state.song.lines.filter((l) => l.flags.length).length;
+  $("#studio-state").textContent = flagged
+    ? `${flagged} ligne${flagged > 1 ? "s" : ""} à vérifier à l'écoute`
+    : "Aucune ligne douteuse";
 }
 
 function replaceSong(song) {
@@ -309,48 +289,22 @@ function renderSegments() {
 }
 
 function segRow(line, vmap) {
-  const editing = state.editing === line.i;
-  let jp;
-  if (editing) {
-    const input = h("input", { type: "text", value: line.text, "aria-label": "Texte japonais corrigé", class: "jp",
-      onkeydown: (e) => { if (e.key === "Enter") saveLine(line.i, input.value); if (e.key === "Escape") { state.editing = null; renderSegments(); } } });
-    jp = h("div", { class: "edit-box" }, input,
-      h("button", { type: "button", class: "btn small primary", onclick: () => saveLine(line.i, input.value) }, "Enregistrer"),
-      h("button", { type: "button", class: "btn small", onclick: () => { state.editing = null; renderSegments(); } }, "Annuler"));
-    setTimeout(() => input.focus(), 0);
-  } else {
-    jp = h("span", { class: "jp jp-line" }, lineWords(line, vmap));
-  }
+  const meta = line.flags.length
+    ? h("div", { class: "meta-row" },
+        ...line.flags.map((f) => h("span", { class: "flag" }, f)),
+        h("button", { type: "button", class: "linkbtn", title: "Retirer l'alerte après avoir écouté la ligne",
+          onclick: () => markReviewed(line.i) }, "C'est juste"))
+    : null;
 
-  const meta = h("div", { class: "meta-row" },
-    ...line.flags.map((f) => h("span", { class: "flag" }, f)),
-    line.edited ? h("span", { class: "edited", title: line.original_text ? `Avant : ${line.original_text}` : null }, "corrigée") : null,
-    editing ? null : h("button", { type: "button", class: "linkbtn", onclick: () => { state.editing = line.i; renderSegments(); } }, "Corriger"),
-    line.flags.length && !editing ? h("button", { type: "button", class: "linkbtn", onclick: () => markReviewed(line.i) }, "C'est juste") : null);
-
-  let fr;
-  if (prefs.frHidden && !state.revealed.has(line.i) && line.fr) {
-    fr = h("button", { type: "button", class: "reveal", onclick: () => { state.revealed.add(line.i); renderSegments(); } }, "Voir la traduction");
-  } else {
-    fr = [line.fr || h("span", { class: "muted" }, "—"),
-      line.fr_stale && line.fr ? h("span", { class: "stale" }, "Traduction de l'ancienne version") : null];
-  }
+  const fr = prefs.frHidden && !state.revealed.has(line.i) && line.fr
+    ? h("button", { type: "button", class: "reveal", onclick: () => { state.revealed.add(line.i); renderSegments(); } }, "Voir la traduction")
+    : (line.fr || h("span", { class: "muted" }, "—"));
 
   return h("div", { class: `seg${line.flags.length ? " flagged" : ""}`, id: `seg-${line.i}` },
     h("button", { type: "button", class: "ts", "aria-label": `Écouter la ligne à ${fmtTime(line.start)}`, onclick: () => seekLine(line.i, true) },
       h("span", {}, fmtTime(line.start)), h("span", { "aria-hidden": "true" }, "▶")),
-    h("div", { class: "jpcol" }, jp, meta),
+    h("div", { class: "jpcol" }, h("span", { class: "jp jp-line" }, lineWords(line, vmap)), meta),
     h("div", { class: "frcol" }, fr));
-}
-
-async function saveLine(i, text) {
-  if (!text.trim()) { toast("La ligne ne peut pas être vide"); return; }
-  try {
-    const song = await api.put(`${songUrl(state.song)}/lines/${i}`, { text });
-    state.editing = null;
-    replaceSong(song);
-    toast("Ligne corrigée : lectures et vocabulaire mis à jour");
-  } catch (e) { toast(e.message); }
 }
 
 async function markReviewed(i) {
@@ -380,7 +334,8 @@ function renderVocab() {
   const selected = state.selectedWord ? all.find((v) => v.word === state.selectedWord) : null;
   const nChecked = state.checked.size;
 
-  panel.replaceChildren(
+  // replaceChildren affiche « null » en texte : on retire les éléments absents (fiche mot fermée)
+  panel.replaceChildren(...[
     h("div", { class: "vocab-head" },
       h("div", { class: "row" },
         h("h2", {}, "Mots de la chanson"),
@@ -398,7 +353,8 @@ function renderVocab() {
         nChecked ? h("button", { type: "button", class: "linkbtn", onclick: () => { state.checked.clear(); renderVocab(); } }, "Tout décocher") : null),
       h("button", { type: "button", class: "btn primary", disabled: !nChecked, onclick: sendToAnki },
         nChecked ? `Envoyer ${nChecked} carte${nChecked > 1 ? "s" : ""} vers Anki` : "Cochez des mots à apprendre"),
-      h("button", { type: "button", class: "btn", disabled: !nChecked, onclick: downloadApkg }, "Télécharger le paquet .apkg")));
+      h("button", { type: "button", class: "btn", disabled: !nChecked, onclick: downloadApkg }, "Télécharger le paquet .apkg")),
+  ].filter(Boolean));
 }
 
 function vocabItem(v) {
@@ -644,7 +600,7 @@ function setCurrent(idx) {
   const el = document.getElementById(`seg-${idx}`);
   if (!el) return;
   el.classList.add("current");
-  if (!audio.paused && state.editing === null) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (!audio.paused) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 /* ------------------------------------------------------------------ jobs -- */

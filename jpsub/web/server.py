@@ -35,10 +35,6 @@ class Retry(BaseModel):
     force_ja: bool | None = None
 
 
-class LineEdit(BaseModel):
-    text: str
-
-
 class Review(BaseModel):
     reviewed: bool = True
 
@@ -183,20 +179,6 @@ def create_app(config_path: str = "config.yaml", start_worker: bool = True) -> F
         d = library.song_dir(artist_dir, video_id)
         return study.waveform(d, d / data["audio"])
 
-    @app.put("/api/songs/{artist_dir}/{video_id}/lines/{index}")
-    def edit_line(artist_dir: str, video_id: str, index: int, body: LineEdit):
-        d = library.song_dir(artist_dir, video_id)
-        if d is None:
-            raise HTTPException(404)
-        if not body.text.strip():
-            raise HTTPException(400, "Ligne vide")
-        try:
-            study.edit_line(d, index, body.text)
-        except IndexError:
-            raise HTTPException(404, "Ligne introuvable")
-        library.invalidate()
-        return _with_study_info(_song_or_404(artist_dir, video_id))
-
     @app.post("/api/songs/{artist_dir}/{video_id}/lines/{index}/review")
     def review_line(artist_dir: str, video_id: str, index: int, body: Review):
         d = library.song_dir(artist_dir, video_id)
@@ -204,20 +186,6 @@ def create_app(config_path: str = "config.yaml", start_worker: bool = True) -> F
             raise HTTPException(404)
         study.set_reviewed(d, index, body.reviewed)
         return {"ok": True}
-
-    @app.post("/api/songs/{artist_dir}/{video_id}/retranslate")
-    def retranslate(artist_dir: str, video_id: str):
-        key = os.environ.get("DEEPL_API_KEY")
-        if not key:
-            raise HTTPException(400, "DEEPL_API_KEY manquante")
-        d = library.song_dir(artist_dir, video_id)
-        if d is None:
-            raise HTTPException(404)
-        try:
-            done = study.retranslate(d, key, cfg["translation"]["target_lang"])
-        except Exception as e:
-            raise HTTPException(502, f"DeepL : {e}")
-        return {"retranslated": done, "song": _with_study_info(_song_or_404(artist_dir, video_id))}
 
     @app.get("/media/{artist_dir}/{video_id}/{filename}")
     def media(artist_dir: str, video_id: str, filename: str):

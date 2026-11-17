@@ -18,7 +18,7 @@ python -m jpsub serve               # http://127.0.0.1:8000
   - forme d'onde cliquable, lecture, boucle sur une ligne, vitesse réduite ; clavier : espace, ← →
   - chaque ligne : japonais avec furigana, traduction française (« Cacher le français » pour s'entraîner à comprendre seul)
   - les mots à apprendre sont soulignés ; un clic ouvre leur fiche (lecture, sens, occurrences à réécouter, fréquence dans la bibliothèque)
-  - lignes douteuses signalées (confiance Whisper faible, texte surtout non japonais, boucle) ; « Corriger » recalcule lectures et vocabulaire, puis « Retraduire » ne renvoie à DeepL que les lignes corrigées
+  - lignes douteuses signalées (confiance Whisper faible, texte surtout non japonais, boucle) : on les réécoute, puis « C'est juste » retire l'alerte
   - vocabulaire de la chanson : filtres « Avec kanji » / « Nouveaux pour moi », « Je connais déjà », puis envoi des mots cochés vers Anki (AnkiConnect) ou téléchargement d'un paquet `.apkg` (mot, lecture, sens, phrase, traduction, clip audio)
 - **Jobs** : coller des URL, suivre les étapes en direct, relancer une étape en échec, « Forcer le japonais » pour une vidéo rejetée.
 
@@ -28,7 +28,7 @@ elles ne trouveront rien pour les nouvelles chansons (audio seul), utilisez l'at
 
 Architecture : un seul process (API FastAPI + worker en thread + SQLite dans `data/jpsub.sqlite3`).
 La table `jobs` sert de file d'attente, la base garde aussi le sens des mots et ce que vous connaissez déjà ;
-les dossiers `output/` restent la source de vérité (les corrections y sont écrites).
+les dossiers `output/` restent la source de vérité.
 
 ## Détection du japonais
 
