@@ -27,7 +27,6 @@ DEFAULTS = {
     },
     "subtitles": {"max_line_len": 22, "min_duration": 0.8},
     "study": {"enabled": True},
-    "black_video": {"enabled": False},
     "translation": {"target_lang": "FR"},
     "paths": {
         "output_dir": "./output",

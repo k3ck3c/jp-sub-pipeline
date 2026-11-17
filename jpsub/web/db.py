@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS word_meanings (
     meaning TEXT,
     created_at REAL
 );
+-- Suivi d'apprentissage : 'known' (je connais déjà) ou 'anki' (carte créée)
+CREATE TABLE IF NOT EXISTS word_status (
+    word TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    updated_at REAL
+);
 """
 
 MAX_LOG_CHARS = 20000
@@ -108,6 +114,30 @@ class DB:
     def set_meaning(self, word: str, meaning: str) -> None:
         self._q("INSERT OR REPLACE INTO word_meanings (word, meaning, created_at) VALUES (?, ?, ?)",
                 (word, meaning, time.time()))
+
+    def meanings(self, words) -> dict:
+        words = list(words)
+        if not words:
+            return {}
+        marks = ",".join("?" * len(words))
+        rows = self._q(f"SELECT word, meaning FROM word_meanings WHERE word IN ({marks})", words).fetchall()
+        return {r["word"]: r["meaning"] for r in rows}
+
+    # --- suivi des mots ------------------------------------------------------
+    def word_statuses(self, words) -> dict:
+        words = list(words)
+        if not words:
+            return {}
+        marks = ",".join("?" * len(words))
+        rows = self._q(f"SELECT word, status FROM word_status WHERE word IN ({marks})", words).fetchall()
+        return {r["word"]: r["status"] for r in rows}
+
+    def set_word_status(self, word: str, status) -> None:
+        if status:
+            self._q("INSERT OR REPLACE INTO word_status (word, status, updated_at) VALUES (?, ?, ?)",
+                    (word, status, time.time()))
+        else:
+            self._q("DELETE FROM word_status WHERE word=?", (word,))
 
 
 def _job(row, with_log=False) -> dict:

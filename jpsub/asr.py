@@ -40,7 +40,10 @@ def transcribe_local(audio_path, model, language="ja", beam_size=5, vad_filter=F
     for seg in segments:
         text = clean_japanese_text(seg.text)
         if text:
-            results.append({"start": round(seg.start, 3), "end": round(seg.end, 3), "text": text})
+            results.append({"start": round(seg.start, 3), "end": round(seg.end, 3), "text": text,
+                            # gardés pour signaler les lignes douteuses dans l'atelier
+                            "avg_logprob": round(seg.avg_logprob, 3),
+                            "no_speech_prob": round(seg.no_speech_prob, 3)})
         if on_progress and duration:
             on_progress(min(0.99, seg.end / duration))
     log(f"[ASR] {len(results)} segments")

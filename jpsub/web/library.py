@@ -10,10 +10,10 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from .. import japanese
+from .. import japanese, study
 from ..utils import read_json
 
-AUDIO_PRIORITY = ["source_audio.*", "audio.wav", "source_video.*", "black_video.mp4"]
+AUDIO_PRIORITY = ["source_audio.*", "audio.wav", "source_video.*"]
 SAFE_NAME = re.compile(r"^[\w\-. ]+$", re.UNICODE)
 MEDIA_EXT = {".m4a", ".mp3", ".wav", ".webm", ".mp4", ".mkv", ".opus", ".ogg", ".vtt", ".srt", ".ass"}
 
@@ -102,14 +102,17 @@ class Library:
 
     # --- détail --------------------------------------------------------------
     def song(self, artist_dir: str, video_id: str):
+        """Tout ce qu'il faut à l'atelier : lignes (mots, traduction, alertes) et vocabulaire."""
         d = self.song_dir(artist_dir, video_id)
         if d is None or not (d / "segments.json").exists():
             return None
         summary = self._summary(d)
-        segs = read_json(d / "segments.json", []) or []
-        fr = read_json(d / "segments.fr.json", []) or []
+        segs = study.load_segments(d)
+        fr = study.load_fr(d)
+        flags = japanese.line_flags(segs)
         lines = []
         for i, seg in enumerate(segs):
+            clip = self._clip_name(d, video_id, i, seg)
             lines.append({
                 "i": i,
                 "start": seg["start"],
@@ -117,10 +120,20 @@ class Library:
                 "text": seg["text"],
                 "tokens": japanese.tokens_json(seg["text"]),
                 "fr": fr[i]["text"] if i < len(fr) else "",
-                "clip": self._clip_name(d, video_id, i, seg),
+                "fr_stale": bool(seg.get("fr_stale")),
+                "edited": bool(seg.get("edited")),
+                "original_text": seg.get("original_text"),
+                "flags": flags[i],
+                "clip": clip,
+                "clip_path": str(d / "anki_media" / clip) if clip else None,
             })
         meta = read_json(d / "metadata.detected.json", {}) or {}
-        return {**summary, "lines": lines, "language_report": meta.get("language")}
+        return {**summary, "dir": str(d), "lines": lines, "vocab": japanese.song_vocab(segs),
+                "language_report": meta.get("language")}
+
+    def invalidate(self) -> None:
+        self._cache = (0.0, [])
+        self._vocab_index = (0.0, Counter())
 
     @staticmethod
     def _clip_name(d: Path, video_id: str, i: int, seg: dict):
@@ -132,17 +145,14 @@ class Library:
         return None
 
     # --- vocabulaire ---------------------------------------------------------
-    def word_count(self, word: str) -> int:
+    def songs_with_word(self) -> Counter:
+        """Pour chaque mot (forme de base) : dans combien de chansons il apparaît."""
         ts, index = self._vocab_index
-        if time.time() - ts > 60:
+        if time.time() - ts > 120:
             index = Counter()
-            for f in glob.glob(str(self.root / "*" / "*" / "vocab.json")):
-                data = read_json(f, []) or []
-                if isinstance(data, dict):  # ancien format {mot: {...}}
-                    for w, v in data.items():
-                        index[w] += int((v or {}).get("count", 1))
-                else:
-                    for v in data:
-                        index[v.get("word")] += int(v.get("count", 1))
+            for s in self.songs():
+                d = self.root / s["artist_dir"] / s["video_id"]
+                for v in japanese.song_vocab(study.load_segments(d)):
+                    index[v["word"]] += 1
             self._vocab_index = (time.time(), index)
-        return index.get(word, 0)
+        return index

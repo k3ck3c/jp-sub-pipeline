@@ -127,17 +127,26 @@ def push_sentence_cards(segments, fr_segments, artist, title, video_id, tag, log
     return stats
 
 
-def push_word_card(word, reading, meaning, sentence, sentence_fr, audio_file, audio_path, source, deck) -> int:
+def push_word_cards(cards: list, deck: str) -> dict:
+    """Une note par mot (voir study.word_cards). Les mots déjà présents sont comptés comme doublons."""
     ensure_deck(deck)
     ensure_model()
-    audio_tag = ""
-    if audio_path and os.path.exists(audio_path):
-        store_media_file(audio_file, audio_path)
-        audio_tag = f"[sound:{audio_file}]"
-    return anki_request("addNote", {"note": {
-        "deckName": deck, "modelName": WORD_MODEL_NAME,
-        "fields": {"Word": word, "Reading": reading, "Meaning": meaning, "Sentence": sentence,
-                   "SentenceFR": sentence_fr, "Audio": audio_tag, "Source": source},
-        "tags": ["jp-sub", "word"],
-        "options": {"allowDuplicate": False},
-    }})
+    notes = []
+    for c in cards:
+        audio_tag = ""
+        if c.get("clip_path") and os.path.exists(c["clip_path"]):
+            store_media_file(c["clip"], c["clip_path"])
+            audio_tag = f"[sound:{c['clip']}]"
+        notes.append({
+            "deckName": deck, "modelName": WORD_MODEL_NAME,
+            "fields": {"Word": c["word"], "Reading": c["reading"], "Meaning": c["meaning"],
+                       "Sentence": c["sentence"], "SentenceFR": c["sentence_fr"], "Audio": audio_tag,
+                       "Source": c["source"]},
+            "tags": ["jp-sub", "word"],
+            "options": {"allowDuplicate": False},
+        })
+    can_add = anki_request("canAddNotes", {"notes": notes}) or []
+    to_add = [n for n, ok in zip(notes, can_add) if ok]
+    result = anki_request("addNotes", {"notes": to_add}) if to_add else []
+    added = sum(1 for r in result or [] if r)
+    return {"added": added, "duplicates": len(notes) - len(to_add), "errors": len(to_add) - added}

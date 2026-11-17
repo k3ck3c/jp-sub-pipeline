@@ -12,9 +12,10 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 
-from .. import anki, translate
+from .. import anki, study, translate
 from ..config import load_config
 from ..pipeline import set_language_override
 from ..utils import is_url
@@ -34,12 +35,21 @@ class Retry(BaseModel):
     force_ja: bool | None = None
 
 
-class WordCard(BaseModel):
-    song: str          # « artist_dir/video_id »
-    line: int
+class LineEdit(BaseModel):
+    text: str
+
+
+class Review(BaseModel):
+    reviewed: bool = True
+
+
+class Words(BaseModel):
+    words: list[str]
+
+
+class WordStatus(BaseModel):
     word: str
-    reading: str = ""
-    meaning: str = ""
+    status: str | None = None   # known | anki | None
 
 
 def create_app(config_path: str = "config.yaml", start_worker: bool = True) -> FastAPI:
@@ -140,12 +150,74 @@ def create_app(config_path: str = "config.yaml", start_worker: bool = True) -> F
             items = [s for s in items if ql in f"{s['title']} {s['artist']} {s['title_fr']}".lower()]
         return {"songs": items}
 
-    @app.get("/api/songs/{artist_dir}/{video_id}")
-    def song(artist_dir: str, video_id: str):
+    def _song_or_404(artist_dir, video_id):
         data = library.song(artist_dir, video_id)
         if not data:
             raise HTTPException(404, "Chanson introuvable")
         return data
+
+    def _with_study_info(data):
+        """Ajoute au vocabulaire le sens connu, le statut (connu / dans Anki) et la fréquence."""
+        words = [v["word"] for v in data["vocab"]]
+        meanings, statuses = db.meanings(words), db.word_statuses(words)
+        across = library.songs_with_word()
+        for v in data["vocab"]:
+            v["meaning"] = meanings.get(v["word"], "")
+            v["status"] = statuses.get(v["word"])
+            v["songs"] = across.get(v["word"], 1)
+        for line in data["lines"]:
+            line.pop("clip_path", None)
+        data.pop("dir", None)
+        data["translation_available"] = bool(os.environ.get("DEEPL_API_KEY"))
+        return data
+
+    @app.get("/api/songs/{artist_dir}/{video_id}")
+    def song(artist_dir: str, video_id: str):
+        return _with_study_info(_song_or_404(artist_dir, video_id))
+
+    @app.get("/api/songs/{artist_dir}/{video_id}/waveform")
+    def song_waveform(artist_dir: str, video_id: str):
+        data = _song_or_404(artist_dir, video_id)
+        if not data["audio"]:
+            raise HTTPException(404, "Pas d'audio")
+        d = library.song_dir(artist_dir, video_id)
+        return study.waveform(d, d / data["audio"])
+
+    @app.put("/api/songs/{artist_dir}/{video_id}/lines/{index}")
+    def edit_line(artist_dir: str, video_id: str, index: int, body: LineEdit):
+        d = library.song_dir(artist_dir, video_id)
+        if d is None:
+            raise HTTPException(404)
+        if not body.text.strip():
+            raise HTTPException(400, "Ligne vide")
+        try:
+            study.edit_line(d, index, body.text)
+        except IndexError:
+            raise HTTPException(404, "Ligne introuvable")
+        library.invalidate()
+        return _with_study_info(_song_or_404(artist_dir, video_id))
+
+    @app.post("/api/songs/{artist_dir}/{video_id}/lines/{index}/review")
+    def review_line(artist_dir: str, video_id: str, index: int, body: Review):
+        d = library.song_dir(artist_dir, video_id)
+        if d is None:
+            raise HTTPException(404)
+        study.set_reviewed(d, index, body.reviewed)
+        return {"ok": True}
+
+    @app.post("/api/songs/{artist_dir}/{video_id}/retranslate")
+    def retranslate(artist_dir: str, video_id: str):
+        key = os.environ.get("DEEPL_API_KEY")
+        if not key:
+            raise HTTPException(400, "DEEPL_API_KEY manquante")
+        d = library.song_dir(artist_dir, video_id)
+        if d is None:
+            raise HTTPException(404)
+        try:
+            done = study.retranslate(d, key, cfg["translation"]["target_lang"])
+        except Exception as e:
+            raise HTTPException(502, f"DeepL : {e}")
+        return {"retranslated": done, "song": _with_study_info(_song_or_404(artist_dir, video_id))}
 
     @app.get("/media/{artist_dir}/{video_id}/{filename}")
     def media(artist_dir: str, video_id: str, filename: str):
@@ -155,50 +227,65 @@ def create_app(config_path: str = "config.yaml", start_worker: bool = True) -> F
         return FileResponse(path)
 
     # --- mots & Anki -----------------------------------------------------------
-    @app.get("/api/word")
-    def word(w: str):
-        meaning = db.get_meaning(w)
+    @app.post("/api/meanings")
+    def meanings(body: Words):
+        """Sens des mots, traduits par DeepL en un seul lot puis gardés en cache."""
+        words = list(dict.fromkeys(w for w in body.words if w))[:200]
+        known = db.meanings(words)
+        missing = [w for w in words if w not in known]
         key = os.environ.get("DEEPL_API_KEY")
-        if meaning is None and key:
+        if missing and key:
             try:
-                meaning = translate.translate_text(w, key, cfg["translation"]["target_lang"])
-                db.set_meaning(w, meaning)
+                for start in range(0, len(missing), 50):
+                    chunk = missing[start:start + 50]
+                    for w, m in zip(chunk, translate.translate_batch(chunk, key, cfg["translation"]["target_lang"])):
+                        db.set_meaning(w, m)
+                        known[w] = m
             except Exception as e:
-                meaning = None
-                print(f"[word] DeepL : {e}")
-        return {"word": w, "meaning": meaning or "", "count": library.word_count(w),
-                "translation_available": bool(key)}
+                print(f"[meanings] DeepL : {e}")
+        return {"meanings": known, "translation_available": bool(key)}
+
+    @app.post("/api/words/status")
+    def word_status(body: WordStatus):
+        if body.status not in (None, "known", "anki"):
+            raise HTTPException(400, "Statut inconnu")
+        db.set_word_status(body.word, body.status)
+        return {"ok": True}
+
+    def _cards(artist_dir, video_id, words):
+        data = _song_or_404(artist_dir, video_id)
+        cards = study.word_cards(data, words, db.meanings(words))
+        if not cards:
+            raise HTTPException(400, "Aucun mot sélectionné")
+        return data, cards
 
     @app.get("/api/anki/status")
     def anki_status():
         try:
-            version = anki.anki_request("version")
-            return {"ok": True, "version": version, "url": anki.anki_url()}
+            return {"ok": True, "version": anki.anki_request("version"), "url": anki.anki_url()}
         except Exception as e:
             return {"ok": False, "error": str(e), "url": anki.anki_url()}
 
-    @app.post("/api/anki/word")
-    def anki_word(body: WordCard):
-        artist_dir, _, video_id = body.song.partition("/")
-        data = library.song(artist_dir, video_id)
-        if not data or not (0 <= body.line < len(data["lines"])):
-            raise HTTPException(404, "Ligne introuvable")
-        line = data["lines"][body.line]
-        clip_path = None
-        if line["clip"]:
-            clip_path = str(library.media_path(artist_dir, video_id, line["clip"]) or "")
+    @app.post("/api/songs/{artist_dir}/{video_id}/anki")
+    def send_to_anki(artist_dir: str, video_id: str, body: Words):
+        data, cards = _cards(artist_dir, video_id, body.words)
         try:
-            note_id = anki.push_word_card(
-                word=body.word, reading=body.reading, meaning=body.meaning or (db.get_meaning(body.word) or ""),
-                sentence=line["text"], sentence_fr=line["fr"], audio_file=line["clip"], audio_path=clip_path,
-                source=f"{data['artist']} — {data['title']}", deck=f"JP::{data['artist']}::Mots",
-            )
+            stats = anki.push_word_cards(cards, deck=f"JP::{data['artist']}::Mots")
         except Exception as e:
-            msg = str(e)
-            if "duplicate" in msg.lower():
-                raise HTTPException(409, "Carte déjà présente dans Anki")
-            raise HTTPException(502, f"Anki injoignable ou erreur : {msg}")
-        return {"ok": True, "note_id": note_id}
+            raise HTTPException(502, f"Anki injoignable ({anki.anki_url()}) : {e}")
+        for c in cards:
+            db.set_word_status(c["word"], "anki")
+        return stats
+
+    @app.post("/api/songs/{artist_dir}/{video_id}/apkg")
+    def export_apkg(artist_dir: str, video_id: str, body: Words):
+        data, cards = _cards(artist_dir, video_id, body.words)
+        path = study.build_apkg(cards, f"JP::{data['artist']}::Mots")
+        for c in cards:
+            db.set_word_status(c["word"], "anki")
+        name = f"jpsub-{data['artist_dir']}-{video_id}.apkg"
+        return FileResponse(path, filename=name, media_type="application/octet-stream",
+                            background=BackgroundTask(os.remove, path))
 
     # --- interface -------------------------------------------------------------
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

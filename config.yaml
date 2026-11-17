@@ -14,9 +14,6 @@ language_check:
   reject: 0.2        # < 0.2 : rejeté (bouton « Forcer le japonais » dans l'appli, ou --force-ja)
   meta_reject_score: -3
 
-black_video:
-  enabled: false     # la vidéo noire n'est plus utile avec le lecteur web
-
 subtitles:
   max_line_len: 22
   min_duration: 0.8

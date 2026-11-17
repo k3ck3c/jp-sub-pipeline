@@ -153,18 +153,6 @@ def st_language(ctx: Context):
         raise Rejected(ctx.report.reason)
 
 
-def st_black_video(ctx: Context):
-    if not ctx.cfg["black_video"]["enabled"]:
-        return "skip"
-    out = ctx.path("black_video.mp4")
-    if os.path.exists(out):
-        return "cache"
-    run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
-         "-i", "color=c=black:s=1280x720:r=30", "-i", ctx.wav, "-c:v", "libx264", "-preset", "veryfast",
-         "-tune", "stillimage", "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", "-shortest", out],
-        log=ctx.log)
-
-
 def st_transcribe(ctx: Context):
     a = ctx.cfg["asr"]
     fp = {k: a[k] for k in ("backend", "model", "beam_size", "vad_filter", "language")}
@@ -267,7 +255,6 @@ STAGES = [
     ("download", "Téléchargement", st_download),
     ("audio", "Audio WAV", st_audio),
     ("language", "Langue (audio)", st_language),
-    ("black_video", "Vidéo noire", st_black_video),
     ("transcribe", "Transcription", st_transcribe),
     ("refine", "Raffinage + furigana", st_refine),
     ("export", "Export SRT/VTT", st_export),
