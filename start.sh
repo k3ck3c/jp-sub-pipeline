@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Lance jpsub (interface web + pipeline) en une commande.
+# Lance jpsub (Anki + interface web + pipeline) en une commande.
+#
+# Anki est démarré s'il ne répond pas déjà sur le port 8765 (AnkiConnect).
 #
 #   ./start.sh            démarre avec Docker, puis ouvre http://localhost:8000
 #   ./start.sh local      démarre sans Docker (crée .venv au premier lancement)
 #   ./start.sh stop       arrête le conteneur
 #   ./start.sh logs       affiche les journaux du conteneur
+#   ./start.sh anki       lance seulement Anki
 #   ./start.sh rebuild    reconstruit l'image (après une mise à jour du code ou de yt-dlp)
 #
-# Variables utiles : JPSUB_PORT (défaut 8000), JPSUB_NO_BROWSER=1 pour ne pas ouvrir le navigateur.
+# Variables utiles : JPSUB_PORT (défaut 8000), JPSUB_NO_BROWSER=1 pour ne pas ouvrir le navigateur,
+#   JPSUB_NO_ANKI=1 pour ne pas lancer Anki, JPSUB_ANKI_CMD pour indiquer la commande qui lance Anki.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -18,6 +22,55 @@ SERVICE="jpsub-web"
 
 say()  { printf '\033[1m[jpsub]\033[0m %s\n' "$*"; }
 fail() { printf '\033[31m[jpsub]\033[0m %s\n' "$*" >&2; exit 1; }
+warn() { printf '\033[33m[jpsub]\033[0m %s\n' "$*" >&2; }
+
+ANKI_PORT=8765
+
+anki_ready() {
+  curl -fsS -m 2 "http://127.0.0.1:${ANKI_PORT}" -d '{"action":"version","version":6}' >/dev/null 2>&1
+}
+
+find_anki() {
+  if [ -n "${JPSUB_ANKI_CMD:-}" ]; then echo "$JPSUB_ANKI_CMD"; return; fi
+  if command -v anki >/dev/null 2>&1; then command -v anki; return; fi
+  # Installation par le launcher officiel (anki-launcher)
+  local launcher="$HOME/.local/share/AnkiProgramFiles/.venv/bin/anki"
+  if [ -x "$launcher" ]; then echo "$launcher"; return; fi
+  if command -v flatpak >/dev/null 2>&1 && flatpak info net.ankiweb.Anki >/dev/null 2>&1; then
+    echo "flatpak run net.ankiweb.Anki"; return
+  fi
+}
+
+ensure_anki() {
+  [ "${JPSUB_NO_ANKI:-}" = "1" ] && return 0
+  if anki_ready; then
+    say "Anki répond déjà sur le port ${ANKI_PORT}."
+    return 0
+  fi
+  local cmd
+  cmd="$(find_anki)"
+  if [ -z "$cmd" ]; then
+    warn "Anki introuvable : les cartes ne pourront pas être envoyées (le reste fonctionne)."
+    warn "Indiquez la commande avec JPSUB_ANKI_CMD=… si Anki est installé ailleurs."
+    return 0
+  fi
+  if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    warn "Pas d'écran graphique détecté : Anki n'est pas lancé."
+    return 0
+  fi
+  say "Lancement d'Anki…"
+  # Détaché du terminal : Anki reste ouvert après la fin du script
+  # shellcheck disable=SC2086
+  setsid nohup $cmd >/dev/null 2>&1 < /dev/null &
+  for _ in $(seq 1 45); do
+    if anki_ready; then
+      say "AnkiConnect prêt sur le port ${ANKI_PORT}."
+      return 0
+    fi
+    sleep 1
+  done
+  warn "Anki est lancé mais AnkiConnect ne répond pas sur ${ANKI_PORT} (profil à choisir ? extension AnkiConnect absente ?)."
+}
 
 prepare() {
   # Les volumes Docker doivent exister avant le lancement, sinon Docker les crée en root.
@@ -59,6 +112,7 @@ compose() {
 start_docker() {
   command -v docker >/dev/null 2>&1 || fail "Docker introuvable. Utilisez ./start.sh local"
   prepare
+  ensure_anki
   say "Démarrage du conteneur ${SERVICE} (la première fois, la construction prend quelques minutes)…"
   compose up -d --build "$SERVICE"
   if wait_until_ready; then
@@ -72,6 +126,7 @@ start_docker() {
 
 start_local() {
   prepare
+  ensure_anki
   local venv="${JPSUB_VENV:-.venv}"
   local py="${venv}/bin/python"
   if [ ! -x "$py" ]; then
@@ -95,9 +150,10 @@ start_local() {
 case "${1:-docker}" in
   docker|start|"") start_docker ;;
   local)           start_local ;;
+  anki)            ensure_anki ;;
   stop)            compose stop "$SERVICE" && say "Arrêté." ;;
   logs)            compose logs -f --tail 100 "$SERVICE" ;;
   rebuild)         prepare; compose build --no-cache "$SERVICE" && start_docker ;;
-  -h|--help|help)  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help)  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' ;;
   *)               fail "Commande inconnue : $1 (voir ./start.sh help)" ;;
 esac

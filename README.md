@@ -13,6 +13,11 @@ Le code vit dans le package `jpsub/` : la même pipeline sert la ligne de comman
 ./start.sh rebuild   # reconstruit l'image (mise à jour du code ou de yt-dlp)
 ```
 
+`./start.sh` lance aussi Anki s'il ne répond pas déjà sur le port 8765 (AnkiConnect),
+pour que les cartes puissent être envoyées ; `./start.sh anki` ne lance qu'Anki,
+`JPSUB_NO_ANKI=1 ./start.sh` s'en passe. L'extension AnkiConnect doit écouter sur `0.0.0.0`
+(`webBindAddress`) pour être joignable depuis le conteneur.
+
 Le conteneur redémarre tout seul avec Docker tant qu'il n'a pas été arrêté par `./start.sh stop`.
 Mettez votre clé DeepL dans `.env` (créé au premier lancement à partir de `.env.example`).
 
