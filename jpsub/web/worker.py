@@ -64,7 +64,7 @@ class Worker:
             result = run_pipeline(job["input"], self.cfg, force_ja=job["force_ja"], on_event=on_event, log=log)
             self.db.update_job(job_id, status="done", progress=1, result=result, title=result["title"],
                                artist=result["artist"], out_dir=result["out_dir"], finished_at=time.time(),
-                               message="Terminé")
+                               message=" · ".join(["Terminé"] + result.get("warnings", [])))
         except Cancelled:
             log("Annulé")
             self.db.update_job(job_id, status="cancelled", message="Annulé", finished_at=time.time())

@@ -43,6 +43,7 @@ class Context:
     clips: list = field(default_factory=list)
     progress: callable = None  # progression interne d'une étape (0..1)
     timings: dict = field(default_factory=dict)
+    warnings: list = field(default_factory=list)  # problèmes non bloquants, affichés dans le job
 
     def path(self, name: str) -> str:
         return os.path.join(self.out_dir, name)
@@ -266,6 +267,12 @@ def st_vocab(ctx: Context):
 def st_anki(ctx: Context):
     if not env_flag("ANKI_CONNECT_ENABLED"):
         return "skip"
+    if not anki.is_available():
+        # Anki fermé : tout le reste est prêt, on ne fait pas échouer le job pour ça.
+        msg = f"Anki ne répond pas ({anki.anki_url()}) : cartes non envoyées, relancez le job une fois Anki ouvert"
+        ctx.log(f"[Anki] {msg}")
+        ctx.warnings.append(msg)
+        return "skip"
     title = _display_title(ctx)
     anki.push_sentence_cards(ctx.clips or ctx.segments, ctx.fr_segments, ctx.artist, title,
                              ctx.video_id, slugify(ctx.artist), log=ctx.log)
@@ -338,7 +345,7 @@ def run_pipeline(input_value: str, cfg: dict, force_ja=False, on_event=None, log
 
     _write_meta(ctx)
     ctx.timings["total"] = time.perf_counter() - start_all
-    return {"out_dir": ctx.out_dir, "artist": ctx.artist, "video_id": ctx.video_id,
+    return {"out_dir": ctx.out_dir, "artist": ctx.artist, "video_id": ctx.video_id, "warnings": ctx.warnings,
             "title": _display_title(ctx), "language": ctx.report.to_dict(), "timings": ctx.timings}
 
 

@@ -28,6 +28,15 @@ def anki_url() -> str:
     return f"http://{host}:{port}"
 
 
+def is_available() -> bool:
+    """AnkiConnect répond-il ? (Anki ouvert avec l'extension)"""
+    try:
+        requests.post(anki_url(), json={"action": "version", "version": 6}, timeout=3).raise_for_status()
+        return True
+    except requests.RequestException:
+        return False
+
+
 def anki_request(action, params=None):
     r = requests.post(anki_url(), json={"action": action, "version": 6, "params": params or {}}, timeout=60)
     r.raise_for_status()
