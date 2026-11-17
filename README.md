@@ -3,15 +3,20 @@
 Apprendre des mots japonais en écoutant ses chansons et en comprenant chaque ligne.
 Le code vit dans le package `jpsub/` : la même pipeline sert la ligne de commande et l'appli web.
 
-```bash
-docker compose up -d jpsub-web      # puis ouvrir http://localhost:8000
-```
-
-Sans Docker (dans un venv avec `requirements-local.txt`) :
+## Lancer
 
 ```bash
-python -m jpsub serve               # http://127.0.0.1:8000
+./start.sh           # Docker : construit si besoin, démarre, ouvre http://localhost:8000
+./start.sh local     # sans Docker : crée .venv et installe les dépendances au premier lancement
+./start.sh stop      # arrête le conteneur
+./start.sh logs      # journaux
+./start.sh rebuild   # reconstruit l'image (mise à jour du code ou de yt-dlp)
 ```
+
+Le conteneur redémarre tout seul avec Docker tant qu'il n'a pas été arrêté par `./start.sh stop`.
+Mettez votre clé DeepL dans `.env` (créé au premier lancement à partir de `.env.example`).
+
+## Ce que fait l'appli
 
 - **Bibliothèque** : toutes les chansons de `output/<artiste>/<id>/`, y compris celles produites par l'ancienne pipeline.
 - **Atelier** (une page par chanson) :
